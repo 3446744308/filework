@@ -49,7 +49,7 @@ export default function Feedback() {
   }
 
   return (
-    <div className="page">
+    <div className="page page-compact-bottom">
       <Card>
         <Title level={3}>意见反馈</Title>
         <Paragraph type="secondary">

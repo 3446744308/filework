@@ -1,15 +1,18 @@
 import React from 'react'
-import { Card, Typography } from 'antd'
+import { Card, Space, Typography } from 'antd'
+import { GithubOutlined } from '@ant-design/icons'
 import { useSettings } from '../hooks/useSettings.js'
 
-const { Title, Paragraph, Text } = Typography
+const { Title, Paragraph, Text, Link } = Typography
+
+const GITHUB_REPO = 'https://github.com/3446744308/filework'
 
 export default function About() {
   const settings = useSettings()
   const siteName = settings?.siteName || '文件驿站 · 匿名共享'
 
   return (
-    <div className="page">
+    <div className="page page-compact-bottom">
       <Card>
         <Title level={3}>关于 {siteName}</Title>
         <Paragraph>
@@ -43,6 +46,15 @@ export default function About() {
         </Paragraph>
         <Paragraph type="secondary">
           <Text type="secondary">发现 Bug 或有功能建议？欢迎在「其他 → 反馈」中告诉我们。</Text>
+        </Paragraph>
+        <Title level={5}>开源地址</Title>
+        <Paragraph>
+          <Space align="center">
+            <GithubOutlined style={{ fontSize: 18 }} />
+            <Link href={GITHUB_REPO} target="_blank" rel="noopener noreferrer">
+              {GITHUB_REPO}
+            </Link>
+          </Space>
         </Paragraph>
       </Card>
     </div>
