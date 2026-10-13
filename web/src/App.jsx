@@ -70,20 +70,27 @@ export default function App() {
           }
         />
       </Routes>
-      {!isAdmin && (settings?.beian || settings?.gongan) && (
+      {!isAdmin && (
         <footer className="site-footer">
-          {settings.beian && (
-            <span className="site-footer-item">
-              <img className="site-footer-icon" src="/icons/icp.webp" alt="ICP 备案" />
-              {settings.beian}
-            </span>
+          {(settings?.beian || settings?.gongan) && (
+            <div className="site-footer-row">
+              {settings.beian && (
+                <span className="site-footer-item">
+                  <img className="site-footer-icon" src="/icons/icp.webp" alt="ICP 备案" />
+                  {settings.beian}
+                </span>
+              )}
+              {settings.gongan && (
+                <span className="site-footer-item">
+                  <img className="site-footer-icon" src="/icons/gonganbeian.png" alt="公安备案" />
+                  {settings.gongan}
+                </span>
+              )}
+            </div>
           )}
-          {settings.gongan && (
-            <span className="site-footer-item">
-              <img className="site-footer-icon" src="/icons/gonganbeian.png" alt="公安备案" />
-              {settings.gongan}
-            </span>
-          )}
+          <div className="site-footer-copy">
+            © 2025-{Math.max(new Date().getFullYear(), 2026)} YayaLe, FanKunLe. All Rights Reserved.
+          </div>
         </footer>
       )}
     </Layout>
