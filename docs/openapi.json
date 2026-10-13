@@ -1,0 +1,767 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "文件驿站 API",
+    "description": "类快递驿站的匿名文件共享服务。上传文件获得 6 位取件码，对方凭码下载。无需登录；分享在有效期或下载次数耗尽后自动销毁。",
+    "version": "1.0.0",
+    "contact": {
+      "name": "文件驿站"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "本地开发"
+    },
+    {
+      "url": "https://your-domain.com",
+      "description": "生产环境（HTTPS 反代）"
+    }
+  ],
+  "tags": [
+    { "name": "公开", "description": "无需鉴权的公开接口" },
+    { "name": "上传", "description": "文件上传" },
+    { "name": "取件", "description": "查询 / 验证密码 / 下载" },
+    { "name": "管理", "description": "需 x-admin-key 请求头" }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "健康检查",
+        "description": "探测服务状态与已部署功能标记（features），App 可据此判断服务器是否支持某能力（如 password）。",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "服务正常",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": {
+                  "ok": true,
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "获取站点设置",
+        "description": "返回站点名称、Logo 状态、上传上限、禁止类型、显示模式、自定义取件码开关等。App 上传前应用 maxFileSize / blockedExts 做本地预检。",
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Settings" },
+                "example": {
+                  "siteName": "我的驿站",
+                  "hasLogo": true,
+                  "maxFileSize": 104857600,
+                  "maxFileSizeCap": 104857600,
+                  "blockedExts": ["exe", "php"],
+                  "displayMode": "simple",
+                  "customCodeEnabled": true,
+                  "updatedAt": 1760000000000
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["管理"],
+        "summary": "保存站点设置",
+        "description": "部分更新；只传需要修改的字段。maxFileSize ≤0 表示恢复 env 默认值。",
+        "operationId": "putSettings",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SettingsUpdate" },
+              "example": {
+                "siteName": "我的驿站",
+                "maxFileSize": 52428800,
+                "blockedExts": ["exe", "php"],
+                "displayMode": "waybill",
+                "customCodeEnabled": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SettingsResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/settings/logo": {
+      "post": {
+        "tags": ["管理"],
+        "summary": "上传站点 Logo",
+        "description": "multipart 上传图片，字段名 logo。支持 PNG/JPG/WebP/SVG/GIF/ICO，≤2MB。",
+        "operationId": "uploadLogo",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["logo"],
+                "properties": {
+                  "logo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Logo 图片文件"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "上传成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SettingsResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "413": { "$ref": "#/components/responses/TooLarge" }
+        }
+      },
+      "delete": {
+        "tags": ["管理"],
+        "summary": "删除站点 Logo",
+        "operationId": "deleteLogo",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SettingsResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/logo": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "读取站点 Logo 图片",
+        "operationId": "getLogo",
+        "responses": {
+          "200": {
+            "description": "图片二进制流",
+            "content": {
+              "image/*": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/notice": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "获取公告",
+        "operationId": "getNotice",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Notice" },
+                "example": {
+                  "enabled": true,
+                  "title": "维护通知",
+                  "content": "本周日凌晨 2 点服务维护……",
+                  "display": "modal",
+                  "updatedAt": 1760000000000
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["管理"],
+        "summary": "保存公告",
+        "description": "content 为空时会强制 enabled=false。",
+        "operationId": "putNotice",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NoticeUpdate" },
+              "example": {
+                "enabled": true,
+                "title": "维护通知",
+                "content": "本周日凌晨 2 点服务维护……",
+                "display": "modal"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NoticeResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/ip": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "获取公网 IP",
+        "description": "服务端请求外部接口取公网 IP（60s 缓存），失败回退 req.ip。",
+        "operationId": "getPublicIp",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ip": { "type": "string", "example": "1.2.3.4" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/upload": {
+      "post": {
+        "tags": ["上传"],
+        "summary": "上传文件",
+        "description": "multipart/form-data 上传单文件。每次成功上传 totalUploads +1。受每 IP 每分钟上传频率限制（默认 10 次）。",
+        "operationId": "uploadFile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": { "$ref": "#/components/schemas/UploadForm" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "上传成功，返回取件码与分享信息",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UploadResult" },
+                "example": {
+                  "code": "832451",
+                  "filename": "报告.pdf",
+                  "size": 1048576,
+                  "mime": "application/pdf",
+                  "note": "选填备注",
+                  "hasPassword": true,
+                  "createdAt": 1760000000000,
+                  "expiresAt": 1760086400000,
+                  "maxDownloads": 5,
+                  "downloads": 0,
+                  "clientIp": "1.2.3.4"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": {
+            "description": "自定义取件码已被占用",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "取件码已被占用" }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/info": {
+      "get": {
+        "tags": ["取件"],
+        "summary": "查询分享信息",
+        "description": "按取件码查询文件名、大小、备注、是否设密、剩余次数等。不含密码哈希与 clientIp。",
+        "operationId": "getInfo",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "description": "6 位数字取件码",
+            "schema": { "type": "string", "pattern": "^\\d{6}$", "example": "832451" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ShareInfo" },
+                "example": {
+                  "code": "832451",
+                  "filename": "报告.pdf",
+                  "size": 1048576,
+                  "mime": "application/pdf",
+                  "note": "选填备注",
+                  "hasPassword": true,
+                  "createdAt": 1760000000000,
+                  "expiresAt": 1760086400000,
+                  "maxDownloads": 5,
+                  "downloads": 1
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/verify-password": {
+      "post": {
+        "tags": ["取件"],
+        "summary": "验证取件密码",
+        "description": "不消耗下载次数，仅校验密码。适合下载前做前置校验并给出友好提示。若分享未设密码则直接返回 ok。",
+        "operationId": "verifyPassword",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyPasswordRequest" },
+              "example": { "code": "832451", "password": "secret123" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "密码正确（或未设密码）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/download": {
+      "get": {
+        "tags": ["取件"],
+        "summary": "下载文件",
+        "description": "成功返回文件流并消耗 1 次次数；次数耗尽或过期后取件码立即失效。设密分享需带 password，错误/缺失返回 403。",
+        "operationId": "downloadFile",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "description": "6 位数字取件码",
+            "schema": { "type": "string", "pattern": "^\\d{6}$", "example": "832451" }
+          },
+          {
+            "name": "password",
+            "in": "query",
+            "required": false,
+            "description": "取件密码（分享设有密码时必填）",
+            "schema": { "type": "string", "maxLength": 64 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文件流。Content-Disposition: attachment; filename=...（UTF-8 编码）",
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": {
+            "description": "下载失败",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ping": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "验证管理密钥（登录前置）",
+        "description": "轻量接口，App 登录页可先调此接口校验密钥，避免直接拉全量列表。",
+        "operationId": "adminPing",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "密钥正确",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "统计概览",
+        "operationId": "adminStats",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AdminStats" },
+                "example": {
+                  "fileCount": 12,
+                  "totalSize": 104857600,
+                  "activeDownloads": 30,
+                  "totalUploads": 120,
+                  "totalDownloads": 345
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/list": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "有效分享列表",
+        "description": "返回当前所有有效分享（publicInfo 结构），不含 password 与 clientIp。",
+        "operationId": "adminList",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "list": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ShareInfo" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/{code}": {
+      "delete": {
+        "tags": ["管理"],
+        "summary": "删除指定分享",
+        "description": "物理删除元数据与文件，取件码立即失效。",
+        "operationId": "adminDelete",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "description": "6 位数字取件码",
+            "schema": { "type": "string", "pattern": "^\\d{6}$" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AdminKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-admin-key",
+        "description": "管理密钥，服务端 .env 中 ADMIN_KEY 配置"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string", "description": "中文错误提示" }
+        }
+      },
+      "Ok": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean", "example": true }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "features": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "已部署功能标记"
+          }
+        }
+      },
+      "ShareInfo": {
+        "type": "object",
+        "description": "分享公开信息（publicInfo）。不含密码哈希与 clientIp。",
+        "properties": {
+          "code": { "type": "string", "pattern": "^\\d{6}$", "description": "6 位取件码" },
+          "filename": { "type": "string", "description": "文件名" },
+          "size": { "type": "integer", "format": "int64", "description": "文件大小（字节）" },
+          "mime": { "type": "string", "description": "MIME 类型" },
+          "note": { "type": "string", "maxLength": 200, "description": "备注" },
+          "hasPassword": { "type": "boolean", "description": "是否设有取件密码" },
+          "createdAt": { "type": "integer", "format": "int64", "description": "创建时间 Unix 毫秒" },
+          "expiresAt": { "type": "integer", "format": "int64", "description": "过期时间 Unix 毫秒" },
+          "maxDownloads": { "type": "integer", "description": "最大下载次数" },
+          "downloads": { "type": "integer", "description": "已下载次数" }
+        }
+      },
+      "UploadResult": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ShareInfo" },
+          {
+            "type": "object",
+            "properties": {
+              "clientIp": { "type": "string", "description": "寄件方 IP（仅上传响应回传，不出现在 /api/info）" }
+            }
+          }
+        ]
+      },
+      "UploadForm": {
+        "type": "object",
+        "required": ["file"],
+        "properties": {
+          "file": { "type": "string", "format": "binary", "description": "待上传文件" },
+          "expiresIn": {
+            "type": "integer",
+            "enum": [1, 24, 72, 168],
+            "default": 24,
+            "description": "有效期（小时）"
+          },
+          "maxDownloads": {
+            "type": "integer",
+            "enum": [1, 3, 5, 10],
+            "default": 5,
+            "description": "最大下载次数"
+          },
+          "note": { "type": "string", "maxLength": 200, "description": "备注" },
+          "customCode": {
+            "type": "string",
+            "pattern": "^\\d{6}$",
+            "description": "自定义取件码（6 位数字）。被占用返回 409；非法则忽略并随机生成；若 customCodeEnabled=false 则被忽略。"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "取件密码（明文仅上传时发送一次，服务端仅存 SHA-256 哈希，永不回传）"
+          }
+        }
+      },
+      "VerifyPasswordRequest": {
+        "type": "object",
+        "required": ["code", "password"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^\\d{6}$" },
+          "password": { "type": "string", "maxLength": 64 }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "siteName": { "type": "string", "maxLength": 50, "description": "站点名称，空串表示默认名" },
+          "hasLogo": { "type": "boolean" },
+          "maxFileSize": { "type": "integer", "format": "int64", "description": "生效的单文件上限（字节）" },
+          "maxFileSizeCap": { "type": "integer", "format": "int64", "description": "环境变量硬上限（字节）" },
+          "blockedExts": { "type": "array", "items": { "type": "string" }, "description": "禁止上传的后缀（无点、小写）" },
+          "displayMode": { "type": "string", "enum": ["simple", "waybill"], "description": "发件成功页显示模式" },
+          "customCodeEnabled": { "type": "boolean", "description": "是否允许自定义取件码" },
+          "updatedAt": { "type": "integer", "format": "int64" }
+        }
+      },
+      "SettingsUpdate": {
+        "type": "object",
+        "properties": {
+          "siteName": { "type": "string", "maxLength": 50 },
+          "maxFileSize": { "type": "integer", "format": "int64", "description": "字节；≤0 恢复 env 默认" },
+          "blockedExts": { "type": "array", "items": { "type": "string" } },
+          "displayMode": { "type": "string", "enum": ["simple", "waybill"] },
+          "customCodeEnabled": { "type": "boolean" }
+        }
+      },
+      "SettingsResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "settings": { "$ref": "#/components/schemas/Settings" }
+        }
+      },
+      "Notice": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "title": { "type": "string", "maxLength": 100 },
+          "content": { "type": "string", "maxLength": 2000 },
+          "display": { "type": "string", "enum": ["modal", "bar", "both"] },
+          "updatedAt": { "type": "integer", "format": "int64" }
+        }
+      },
+      "NoticeUpdate": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "title": { "type": "string", "maxLength": 100 },
+          "content": { "type": "string", "maxLength": 2000 },
+          "display": { "type": "string", "enum": ["modal", "bar", "both"] }
+        }
+      },
+      "NoticeResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "notice": { "$ref": "#/components/schemas/Notice" }
+        }
+      },
+      "AdminStats": {
+        "type": "object",
+        "properties": {
+          "fileCount": { "type": "integer", "description": "当前有效分享数" },
+          "totalSize": { "type": "integer", "format": "int64", "description": "当前有效分享总大小（字节）" },
+          "activeDownloads": { "type": "integer", "description": "当前有效分享累计已下载次数之和" },
+          "totalUploads": { "type": "integer", "description": "历史累计上传次数" },
+          "totalDownloads": { "type": "integer", "description": "历史累计下载次数" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "参数错误（400）",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "取件码格式不正确" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "管理密钥错误（401）",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "未授权" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "取件密码错误（403）",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "取件密码错误" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "取件码不存在或已失效（404）",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "取件码不存在或已失效" }
+          }
+        }
+      },
+      "TooLarge": {
+        "description": "文件超过大小限制（413）",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "文件超过大小限制（最大 100MB）" }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "触发限流（429）",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "尝试过于频繁，请 1 分钟后再试" }
+          }
+        }
+      }
+    }
+  }
+}
