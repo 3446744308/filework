@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { App as AntApp, Button, Card, Descriptions, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
-import { DeleteOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
+import { App as AntApp, Button, Card, Descriptions, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
+import { DeleteOutlined, EyeOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons'
 import { api } from '../api.js'
 import { getAdminKey, logout, useAuthorized } from '../hooks/useAdminAuth.js'
 import AdminShell from '../components/AdminShell.jsx'
@@ -27,6 +27,13 @@ export default function AdminFeedback() {
   const [loading, setLoading] = useState(false)
   const [detail, setDetail] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [replyTarget, setReplyTarget] = useState(null)
+  const [replyText, setReplyText] = useState('')
+  const [replySaving, setReplySaving] = useState(false)
+  const [templates, setTemplates] = useState([])
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [templatesText, setTemplatesText] = useState('')
+  const [templatesSaving, setTemplatesSaving] = useState(false)
 
   const handleAuthError = (err) => {
     if (err.status === 401) {
@@ -50,18 +57,90 @@ export default function AdminFeedback() {
     }
   }
 
-  useEffect(() => {
-    if (authorized) loadList()
-  }, [authorized])
-
-  const changeStatus = async (id, status) => {
+  const loadTemplates = async () => {
     try {
-      const data = await api.adminFeedbackStatus(id, status, getAdminKey())
-      setList((prev) => prev.map((item) => (item.id === id ? data.feedback : item)))
-      setDetail((prev) => (prev && prev.id === id ? data.feedback : prev))
-      message.success('状态已更新')
+      const data = await api.adminFeedbackTemplates(getAdminKey())
+      setTemplates(data.templates)
     } catch (err) {
       handleAuthError(err)
+    }
+  }
+
+  useEffect(() => {
+    if (authorized) {
+      loadList()
+      loadTemplates()
+    }
+  }, [authorized])
+
+  const applyUpdate = (data) => {
+    setList((prev) => prev.map((item) => (item.id === data.feedback.id ? data.feedback : item)))
+    setDetail((prev) => (prev && prev.id === data.feedback.id ? data.feedback : prev))
+  }
+
+  const changeStatus = async (id, status, reply) => {
+    try {
+      const data = await api.adminFeedbackStatus(id, status, getAdminKey(), reply)
+      applyUpdate(data)
+      message.success('状态已更新')
+      return true
+    } catch (err) {
+      handleAuthError(err)
+      return false
+    }
+  }
+
+  const onSelectStatus = (item, status) => {
+    if (status === 'done') {
+      setReplyTarget(item)
+      setReplyText(item.reply || '')
+      return
+    }
+    changeStatus(item.id, status)
+  }
+
+  const submitReply = async () => {
+    const text = replyText.trim()
+    if (!text) {
+      message.warning('请填写回复内容')
+      return
+    }
+    setReplySaving(true)
+    try {
+      const ok = await changeStatus(replyTarget.id, 'done', text)
+      if (ok) setReplyTarget(null)
+    } finally {
+      setReplySaving(false)
+    }
+  }
+
+  const openTemplates = async () => {
+    setTemplatesOpen(true)
+    if (!templates.length) await loadTemplates()
+    setTemplatesText(templates.join('\n'))
+  }
+
+  const saveTemplates = async () => {
+    const list = templatesText
+      .split('\n')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 20)
+    if (!list.length) {
+      message.warning('至少保留一条模板')
+      return
+    }
+    setTemplatesSaving(true)
+    try {
+      const data = await api.adminSaveFeedbackTemplates(list, getAdminKey())
+      setTemplates(data.templates)
+      setTemplatesText(data.templates.join('\n'))
+      setTemplatesOpen(false)
+      message.success('模板已保存')
+    } catch (err) {
+      handleAuthError(err)
+    } finally {
+      setTemplatesSaving(false)
     }
   }
 
@@ -136,7 +215,7 @@ export default function AdminFeedback() {
             value={item.status}
             style={{ width: 100 }}
             options={STATUS_OPTIONS}
-            onChange={(v) => changeStatus(item.id, v)}
+            onChange={(v) => onSelectStatus(item, v)}
           />
           <Button size="small" icon={<EyeOutlined />} onClick={() => setDetail(item)}>
             详情
@@ -161,6 +240,9 @@ export default function AdminFeedback() {
               options={STATUS_FILTER_OPTIONS}
               onChange={setStatusFilter}
             />
+            <Button icon={<SettingOutlined />} onClick={openTemplates}>
+              回复模板
+            </Button>
             <Button icon={<ReloadOutlined />} loading={loading} onClick={loadList}>
               刷新
             </Button>
@@ -186,7 +268,7 @@ export default function AdminFeedback() {
         {detail && (
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="反馈 ID">{detail.id}</Descriptions.Item>
-          {detail.code && <Descriptions.Item label="反馈号">{detail.code}</Descriptions.Item>}
+            {detail.code && <Descriptions.Item label="反馈号">{detail.code}</Descriptions.Item>}
             <Descriptions.Item label="提交时间">{formatTime(detail.createdAt)}</Descriptions.Item>
             <Descriptions.Item label="更新时间">{formatTime(detail.updatedAt)}</Descriptions.Item>
             <Descriptions.Item label="类型">
@@ -207,8 +289,66 @@ export default function AdminFeedback() {
                 {detail.content}
               </Typography.Paragraph>
             </Descriptions.Item>
+            {detail.reply && (
+              <Descriptions.Item label="回复">
+                <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0, maxHeight: 240, overflow: 'auto' }}>
+                  {detail.reply}
+                </Typography.Paragraph>
+              </Descriptions.Item>
+            )}
           </Descriptions>
         )}
+      </Modal>
+      <Modal
+        title={`填写回复 · ${replyTarget?.code || ''}`}
+        open={Boolean(replyTarget)}
+        okText="提交回复"
+        cancelText="取消"
+        confirmLoading={replySaving}
+        onOk={submitReply}
+        onCancel={() => setReplyTarget(null)}
+        width={640}
+      >
+        {templates.length > 0 && (
+          <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 12 }}>
+            <Typography.Text type="secondary">快速填充模板：</Typography.Text>
+            <Space wrap size={8}>
+              {templates.map((t, i) => (
+                <Button key={i} size="small" onClick={() => setReplyText(t)}>
+                  {t.length > 14 ? `${t.slice(0, 14)}…` : t}
+                </Button>
+              ))}
+            </Space>
+          </Space>
+        )}
+        <Input.TextArea
+          value={replyText}
+          onChange={(e) => setReplyText(e.target.value)}
+          placeholder="请填写回复内容（用户可通过反馈号查看）"
+          rows={6}
+          maxLength={2000}
+          showCount
+        />
+      </Modal>
+      <Modal
+        title="管理回复模板"
+        open={templatesOpen}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={templatesSaving}
+        onOk={saveTemplates}
+        onCancel={() => setTemplatesOpen(false)}
+        width={640}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+          每行一条模板（最多 20 条，单条 ≤500 字），标为已完成时可一键填充到回复框。
+        </Typography.Paragraph>
+        <Input.TextArea
+          value={templatesText}
+          onChange={(e) => setTemplatesText(e.target.value)}
+          rows={10}
+          placeholder={'例如：\n感谢你的反馈，我们已收到并评估。'}
+        />
       </Modal>
     </AdminShell>
   )

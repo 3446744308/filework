@@ -347,13 +347,15 @@ GET /api/feedback/query?code=FB-24815302
   "code": "FB-24815302",
   "type": "bug",
   "content": "下载偶发失败",
-  "status": "pending",
+  "status": "done",
+  "reply": "已修复，请更新到最新版本。",
   "createdAt": 1760000000000,
   "updatedAt": 1760000000000
 }
 ```
 
 `status`：`pending` 等待中 / `processing` 处理中 / `done` 已完成。不返回 `contact` 与内部 `id`。  
+`reply`：官方回复；仅 `status === 'done'` 时为非空字符串，否则为空串。  
 **错误**：`400` 格式非 `FB-` + 8 位数字 / `404` 不存在 / `429` 限流（独立失败桶）。
 
 ---
@@ -531,9 +533,11 @@ Logo 约束：PNG / JPG / WebP / SVG / GIF / ICO，≤2MB。
 ### 3.8 反馈管理
 
 ```
-GET    /api/admin/feedback        # 列表
-PUT    /api/admin/feedback/:id    # 更新状态
-DELETE /api/admin/feedback/:id    # 删除反馈
+GET    /api/admin/feedback           # 列表
+PUT    /api/admin/feedback/:id       # 更新状态（done 需回复）
+DELETE /api/admin/feedback/:id       # 删除反馈
+GET    /api/admin/feedback/templates # 回复模板列表
+PUT    /api/admin/feedback/templates # 保存回复模板
 ```
 
 反馈对象结构：
@@ -546,6 +550,7 @@ DELETE /api/admin/feedback/:id    # 删除反馈
   "contact": "test@qq.com",
   "content": "下载偶发失败",
   "status": "pending",
+  "reply": "",
   "createdAt": 1760000000000,
   "updatedAt": 1760000000000
 }
@@ -556,10 +561,17 @@ DELETE /api/admin/feedback/:id    # 删除反馈
 | `code` | 反馈号（`FB-` + 8 位数字，公开查询凭据） |
 | `type` | `bug` / `feature` / `other` |
 | `status` | `pending` 等待中 / `processing` 处理中 / `done` 已完成 |
+| `reply` | 官方回复；置为 `done` 时写入（≤2000），并记录 `repliedAt` |
 
 **列表响应 200**：`{ "list": [ ... ] }`（`createdAt` 倒序）  
+**更新请求**：`{ "status": "done", "reply": "已修复，请更新到最新版本。" }` — **status 为 `done` 时 reply 必填**（非空白 ≤2000），否则 `400 已完成状态需要填写回复内容`。  
 **更新响应 200**：`{ "ok": true, "feedback": { ... } }`；非法状态 `400`；不存在 `404`。  
 **删除响应 200**：`{ "ok": true }`（物理删除）。
+
+**回复模板**（`data/feedback-templates.json`，缺文件回退默认 5 条）：
+
+- `GET /api/admin/feedback/templates` → `{ "templates": ["感谢你的反馈，...", ...] }`
+- `PUT /api/admin/feedback/templates` body `{ "templates": ["...", ...] }`（≤20 条，单条 ≤500，去空去重）→ `{ "ok": true, "templates": [...] }`
 
 ---
 

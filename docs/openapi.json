@@ -632,6 +632,68 @@
         }
       }
     },
+    "/api/admin/feedback/templates": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "获取回复模板",
+        "operationId": "adminFeedbackTemplates",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "templates": { "type": "array", "items": { "type": "string", "maxLength": 500 } }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "put": {
+        "tags": ["管理"],
+        "summary": "保存回复模板",
+        "description": "每行一条模板（≤20 条，单条 ≤500），去空去重。",
+        "operationId": "adminSaveFeedbackTemplates",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["templates"],
+                "properties": {
+                  "templates": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 500 } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "templates": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
     "/api/admin/feedback/{id}": {
       "parameters": [
         { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
@@ -639,6 +701,7 @@
       "put": {
         "tags": ["管理"],
         "summary": "更新反馈状态",
+        "description": "status=done 时 reply 必填（≤2000），并记录 repliedAt。",
         "operationId": "adminFeedbackStatus",
         "security": [{ "AdminKey": [] }],
         "requestBody": {
@@ -649,9 +712,11 @@
                 "type": "object",
                 "required": ["status"],
                 "properties": {
-                  "status": { "type": "string", "enum": ["pending", "processing", "done"] }
+                  "status": { "type": "string", "enum": ["pending", "processing", "done"] },
+                  "reply": { "type": "string", "maxLength": 2000, "description": "官方回复；status=done 时必填" }
                 }
-              }
+              },
+              "example": { "status": "done", "reply": "已修复，请更新到最新版本。" }
             }
           }
         },
@@ -862,6 +927,8 @@
           "contact": { "type": "string", "maxLength": 100 },
           "content": { "type": "string", "maxLength": 2000 },
           "status": { "type": "string", "enum": ["pending", "processing", "done"], "description": "等待中 / 处理中 / 已完成" },
+          "reply": { "type": "string", "maxLength": 2000, "description": "官方回复；done 时写入" },
+          "repliedAt": { "type": "integer", "format": "int64", "description": "回复时间" },
           "createdAt": { "type": "integer", "format": "int64" },
           "updatedAt": { "type": "integer", "format": "int64" }
         }
@@ -873,6 +940,7 @@
           "type": { "type": "string", "enum": ["bug", "feature", "other"] },
           "content": { "type": "string", "maxLength": 2000 },
           "status": { "type": "string", "enum": ["pending", "processing", "done"] },
+          "reply": { "type": "string", "description": "官方回复；仅 status=done 时非空" },
           "createdAt": { "type": "integer", "format": "int64" },
           "updatedAt": { "type": "integer", "format": "int64" }
         }

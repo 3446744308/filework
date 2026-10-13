@@ -127,7 +127,21 @@ export default function FeedbackQuery() {
                 },
                 {
                   title: '已完成',
-                  description: result.status === 'done' ? '感谢你的反馈' : '处理完成后更新'
+                  description: result.status === 'done' ? (
+                    <>
+                      <Text type="secondary" style={{ fontSize: 13 }}>感谢你的反馈</Text>
+                      {result.reply && (
+                        <div className="feedback-query-content feedback-query-reply">
+                          <Text type="secondary" style={{ fontSize: 13 }}>官方回复</Text>
+                          <Paragraph
+                            style={{ whiteSpace: 'pre-wrap', marginTop: 8, marginBottom: 0, maxHeight: 240, overflow: 'auto' }}
+                          >
+                            {result.reply}
+                          </Paragraph>
+                        </div>
+                      )}
+                    </>
+                  ) : '处理完成后更新'
                 }
               ]}
             />

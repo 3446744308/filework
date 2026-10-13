@@ -6,6 +6,42 @@ import { config } from './config.js'
 export const FEEDBACK_TYPES = ['bug', 'feature', 'other']
 export const FEEDBACK_STATUSES = ['pending', 'processing', 'done']
 
+export const DEFAULT_REPLY_TEMPLATES = [
+  '感谢你的反馈，我们已收到并评估，问题将在后续版本中修复。',
+  '感谢你的建议！我们会认真考虑并纳入后续规划。',
+  '该问题已在最新版本中修复，请更新后重试。',
+  '感谢反馈，经排查该问题未能复现，如有更多信息欢迎补充。',
+  '你的反馈已处理完成，如有其他问题欢迎随时反馈。'
+]
+
+const templatesPath = path.join(config.dataDir, 'feedback-templates.json')
+
+export function getReplyTemplates() {
+  try {
+    const data = JSON.parse(fs.readFileSync(templatesPath, 'utf8'))
+    if (Array.isArray(data.templates)) {
+      const list = data.templates.map((t) => String(t ?? '').trim()).filter(Boolean).slice(0, 20)
+      if (list.length) return list
+    }
+  } catch {}
+  return [...DEFAULT_REPLY_TEMPLATES]
+}
+
+export function saveReplyTemplates(input) {
+  const list = []
+  if (Array.isArray(input)) {
+    for (const raw of input.slice(0, 20)) {
+      const t = String(raw ?? '').trim().slice(0, 500)
+      if (t && !list.includes(t)) list.push(t)
+    }
+  }
+  const data = { templates: list, updatedAt: Date.now() }
+  const tmp = `${templatesPath}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2))
+  fs.renameSync(tmp, templatesPath)
+  return list
+}
+
 const feedbackPath = (id) => path.join(config.feedbackDir, `${id}.json`)
 
 function readFeedback(id) {
@@ -102,10 +138,20 @@ export function listFeedback() {
   return result
 }
 
-export function updateFeedbackStatus(id, status) {
+export function updateFeedbackStatus(id, status, reply) {
   if (!FEEDBACK_STATUSES.includes(status)) return null
   const item = readFeedback(id)
   if (!item) return null
+  if (status === 'done') {
+    const text = String(reply ?? '').trim().slice(0, 2000)
+    if (!text) {
+      const err = new Error('完成状态需要填写回复内容')
+      err.code = 'REPLY_REQUIRED'
+      throw err
+    }
+    item.reply = text
+    item.repliedAt = Date.now()
+  }
   item.status = status
   item.updatedAt = Date.now()
   writeFeedback(item)

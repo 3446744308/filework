@@ -166,6 +166,12 @@ body {
   overflow: hidden;
 }
 
+.feedback-query-reply {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+  margin-top: 8px;
+}
+
 .site-footer {
   margin-top: auto;
   padding: 16px 24px;

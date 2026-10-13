@@ -23,6 +23,8 @@ import {
   updateFeedbackStatus,
   removeFeedback,
   findFeedbackByCode,
+  getReplyTemplates,
+  saveReplyTemplates,
   FEEDBACK_STATUSES
 } from './feedback.js'
 import { getNotice, saveNotice } from './notice.js'
@@ -153,9 +155,18 @@ app.get('/api/feedback/query', missGuard(config.rateLimitMisses, 60_000, 'fbquer
     type: item.type,
     content: item.content,
     status: item.status,
+    reply: item.status === 'done' ? item.reply || '' : '',
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   })
+})
+
+app.get('/api/admin/feedback/templates', adminAuth, (req, res) => {
+  res.json({ templates: getReplyTemplates() })
+})
+
+app.put('/api/admin/feedback/templates', adminAuth, (req, res) => {
+  res.json({ ok: true, templates: saveReplyTemplates(req.body?.templates) })
 })
 
 app.get('/api/admin/feedback', adminAuth, (req, res) => {
@@ -168,7 +179,13 @@ app.put('/api/admin/feedback/:id', adminAuth, (req, res) => {
   if (!FEEDBACK_STATUSES.includes(req.body?.status)) {
     return fail(res, 400, '状态不正确')
   }
-  const item = updateFeedbackStatus(id, req.body.status)
+  let item
+  try {
+    item = updateFeedbackStatus(id, req.body.status, req.body.reply)
+  } catch (e) {
+    if (e.code === 'REPLY_REQUIRED') return fail(res, 400, e.message)
+    throw e
+  }
   if (!item) return fail(res, 404, '反馈不存在')
   res.json({ ok: true, feedback: item })
 })

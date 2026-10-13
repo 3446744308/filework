@@ -129,11 +129,21 @@ export const api = {
   async adminFeedbackList(key) {
     return request('/api/admin/feedback', { headers: { 'x-admin-key': key } })
   },
-  async adminFeedbackStatus(id, status, key) {
+  async adminFeedbackStatus(id, status, key, reply) {
     return request(`/api/admin/feedback/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', 'x-admin-key': key },
-      body: JSON.stringify({ status })
+      body: JSON.stringify(reply == null ? { status } : { status, reply })
+    })
+  },
+  async adminFeedbackTemplates(key) {
+    return request('/api/admin/feedback/templates', { headers: { 'x-admin-key': key } })
+  },
+  async adminSaveFeedbackTemplates(templates, key) {
+    return request('/api/admin/feedback/templates', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-admin-key': key },
+      body: JSON.stringify({ templates })
     })
   },
   async adminFeedbackDelete(id, key) {

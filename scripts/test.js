@@ -802,15 +802,80 @@ async function run() {
     body: JSON.stringify({ status: 'hacker' })
   })
   assert(fbBadStatus.res.status === 400, '非法状态返回 400', `实际 ${fbBadStatus.res.status}`)
-  const fbDone = await req(`/api/admin/feedback/${fb1.body.id}`, {
+
+  const fbDoneNoReply = await req(`/api/admin/feedback/${fb1.body.id}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
     body: JSON.stringify({ status: 'done' })
   })
   assert(
-    fbDone.res.status === 200 && fbDone.body.feedback.status === 'done',
-    '状态更新为已完成',
+    fbDoneNoReply.res.status === 400,
+    '已完成状态不填回复返回 400',
+    `实际 ${fbDoneNoReply.res.status} ${JSON.stringify(fbDoneNoReply.body)}`
+  )
+
+  const fbDoneEmptyReply = await req(`/api/admin/feedback/${fb1.body.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ status: 'done', reply: '   ' })
+  })
+  assert(fbDoneEmptyReply.res.status === 400, '已完成状态回复仅空白返回 400', `实际 ${fbDoneEmptyReply.res.status}`)
+
+  const fbDone = await req(`/api/admin/feedback/${fb1.body.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ status: 'done', reply: '已修复，请更新到最新版本。' })
+  })
+  assert(
+    fbDone.res.status === 200 &&
+      fbDone.body.feedback.status === 'done' &&
+      fbDone.body.feedback.reply === '已修复，请更新到最新版本。' &&
+      typeof fbDone.body.feedback.repliedAt === 'number',
+    '填写回复后状态更新为已完成并保存回复',
     JSON.stringify(fbDone.body)
+  )
+
+  const fbDoneQuery = await req(`/api/feedback/query?code=${fb1.body.code}`)
+  assert(
+    fbDoneQuery.res.status === 200 &&
+      fbDoneQuery.body.status === 'done' &&
+      fbDoneQuery.body.reply === '已修复，请更新到最新版本。',
+    '查询接口在已完成时返回回复内容',
+    JSON.stringify(fbDoneQuery.body)
+  )
+
+  const fbQueryNoLeak = await req(`/api/feedback/query?code=${fb2.body.code}`)
+  assert(
+    fbQueryNoLeak.res.status === 200 && fbQueryNoLeak.body.reply === '',
+    '未完成反馈查询不返回回复',
+    JSON.stringify(fbQueryNoLeak.body)
+  )
+
+  const fbTplNoKey = await req('/api/admin/feedback/templates')
+  assert(fbTplNoKey.res.status === 401, '无密钥获取回复模板返回 401', `实际 ${fbTplNoKey.res.status}`)
+  const fbTpl = await req('/api/admin/feedback/templates', { headers: { 'x-admin-key': ADMIN_KEY } })
+  assert(
+    fbTpl.res.status === 200 && Array.isArray(fbTpl.body.templates) && fbTpl.body.templates.length > 0,
+    '管理员获取默认回复模板',
+    JSON.stringify(fbTpl.body)
+  )
+  const fbTplSave = await req('/api/admin/feedback/templates', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ templates: ['模板A：已收到你的反馈。', '模板B', ''] })
+  })
+  assert(
+    fbTplSave.res.status === 200 &&
+      fbTplSave.body.templates.length === 2 &&
+      fbTplSave.body.templates[0] === '模板A：已收到你的反馈。',
+    '保存回复模板（过滤空行）',
+    JSON.stringify(fbTplSave.body)
+  )
+  const fbTplRead = await req('/api/admin/feedback/templates', { headers: { 'x-admin-key': ADMIN_KEY } })
+  assert(
+    fbTplRead.res.status === 200 && fbTplRead.body.templates.length === 2,
+    '模板保存后读回',
+    JSON.stringify(fbTplRead.body)
   )
 
   for (const id of [fb1.body.id, fb2.body.id]) {
