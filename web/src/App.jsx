@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Layout, Menu, Typography } from 'antd'
+import { Button, Drawer, Layout, Menu, Typography } from 'antd'
 import {
   DownOutlined,
   DownloadOutlined,
   InfoCircleOutlined,
+  MenuOutlined,
   MessageOutlined,
   MoreOutlined,
   SearchOutlined,
@@ -103,12 +104,17 @@ export default function App() {
   const selected = matchSelected(location.pathname)
   const siteName = settings?.siteName || '文件驿站 · 匿名共享'
   const logoUrl = logoUrlOf(settings)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     document.title = settings?.siteName
       ? `${settings.siteName} · 匿名文件共享`
       : '文件驿站 · 匿名文件共享'
   }, [settings])
+
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [location.pathname])
 
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
@@ -121,11 +127,38 @@ export default function App() {
             </span>
             <Menu
               mode="horizontal"
+              className="site-header-menu"
               selectedKeys={selected ? [selected] : []}
               items={items}
-              style={{ flex: 1, borderBottom: 'none', background: 'transparent', minWidth: 0 }}
+            />
+            <Button
+              className="site-header-burger"
+              type="text"
+              aria-label="打开菜单"
+              icon={<MenuOutlined />}
+              onClick={() => setDrawerOpen(true)}
             />
           </header>
+          <Drawer
+            placement="right"
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            width={260}
+            title={
+              <span className="site-brand">
+                {logoUrl && <img className="site-logo" src={logoUrl} alt="" />}
+                <span className="site-title">{siteName}</span>
+              </span>
+            }
+          >
+            <Menu
+              mode="inline"
+              className="mobile-drawer-menu"
+              selectedKeys={selected ? [selected] : []}
+              items={items}
+              onClick={() => setDrawerOpen(false)}
+            />
+          </Drawer>
           <NoticeBar />
         </>
       )}

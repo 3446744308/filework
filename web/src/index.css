@@ -140,6 +140,51 @@ body {
   color: #8c8c8c;
 }
 
+.site-header-menu {
+  flex: 1;
+  border-bottom: none;
+  background: transparent;
+  min-width: 0;
+}
+
+.site-header-burger {
+  display: none;
+  margin-left: auto;
+  font-size: 18px;
+}
+
+@media (max-width: 768px) {
+  .site-header {
+    padding: 0 12px;
+    gap: 12px;
+  }
+
+  .site-title {
+    font-size: 15px;
+    max-width: 46vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .site-logo {
+    max-width: 90px;
+    height: 24px;
+  }
+
+  .site-header-menu {
+    display: none;
+  }
+
+  .site-header-burger {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+.mobile-drawer-menu {
+  border-inline-end: none !important;
+}
+
 .feedback-query-result {
   margin-top: 28px;
 }
