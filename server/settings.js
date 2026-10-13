@@ -16,6 +16,7 @@ export const LOGO_TYPES = {
 const DEFAULT_SETTINGS = {
   siteName: '',
   beian: '',
+  gongan: '',
   logo: '',
   maxFileSize: 0,
   blockedExts: [],
@@ -52,6 +53,7 @@ export function saveSettings(input) {
   const data = getSettings()
   data.siteName = String(input.siteName ?? data.siteName).slice(0, 50).trim()
   data.beian = String(input.beian ?? data.beian).slice(0, 100).trim()
+  data.gongan = String(input.gongan ?? data.gongan).slice(0, 100).trim()
   if ('maxFileSize' in input) {
     const value = Number(input.maxFileSize)
     if (Number.isFinite(value) && value > 0) {

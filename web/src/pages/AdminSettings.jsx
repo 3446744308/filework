@@ -31,6 +31,7 @@ export default function AdminSettings() {
   const settings = useSettings()
   const [siteName, setSiteName] = useState('')
   const [beian, setBeian] = useState('')
+  const [gongan, setGongan] = useState('')
   const [maxSizeMb, setMaxSizeMb] = useState(null)
   const [blockedExts, setBlockedExts] = useState([])
   const [displayMode, setDisplayMode] = useState('simple')
@@ -42,6 +43,7 @@ export default function AdminSettings() {
     if (settings) {
       setSiteName(settings.siteName || '')
       setBeian(settings.beian || '')
+      setGongan(settings.gongan || '')
       setMaxSizeMb(Math.max(1, Math.round(settings.maxFileSize / MB)))
       setBlockedExts(settings.blockedExts || [])
       setDisplayMode(settings.displayMode === 'waybill' ? 'waybill' : 'simple')
@@ -64,7 +66,7 @@ export default function AdminSettings() {
       const mb = Number(maxSizeMb)
       const maxFileSize = Number.isFinite(mb) && mb > 0 ? Math.round(mb) * MB : 0
       await api.saveSettings(
-        { siteName, beian, maxFileSize, blockedExts, displayMode, customCodeEnabled },
+        { siteName, beian, gongan, maxFileSize, blockedExts, displayMode, customCodeEnabled },
         getAdminKey()
       )
       message.success('设置已保存')
@@ -154,6 +156,26 @@ export default function AdminSettings() {
             </Space.Compact>
             <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
               显示在公开页面底部；留空则不显示备案号。
+            </Typography.Paragraph>
+          </div>
+
+          <div>
+            <Typography.Title level={5}>公安备案号（可选）</Typography.Title>
+            <Space.Compact style={{ width: '100%', maxWidth: 480 }}>
+              <Input
+                value={gongan}
+                onChange={(e) => setGongan(e.target.value)}
+                maxLength={100}
+                showCount
+                placeholder="如：粤公网安备 44030402000000号"
+                onPressEnter={save}
+              />
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存
+              </Button>
+            </Space.Compact>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              显示在公开页面底部，与 ICP 备案号并排；留空则不显示公安备案号。
             </Typography.Paragraph>
           </div>
 

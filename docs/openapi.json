@@ -39,7 +39,7 @@
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
                 "example": {
                   "ok": true,
-                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian"]
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan"]
                 }
               }
             }
@@ -62,6 +62,7 @@
                 "example": {
                   "siteName": "我的驿站",
                   "beian": "粤ICP备2024000000号",
+                  "gongan": "粤公网安备 44030402000000号",
                   "hasLogo": true,
                   "maxFileSize": 104857600,
                   "maxFileSizeCap": 104857600,
@@ -89,6 +90,7 @@
               "example": {
                 "siteName": "我的驿站",
                 "beian": "粤ICP备2024000000号",
+                "gongan": "粤公网安备 44030402000000号",
                 "maxFileSize": 52428800,
                 "blockedExts": ["exe", "php"],
                 "displayMode": "waybill",
@@ -647,6 +649,7 @@
         "properties": {
           "siteName": { "type": "string", "maxLength": 50, "description": "站点名称，空串表示默认名" },
           "beian": { "type": "string", "maxLength": 100, "description": "备案号，空串表示不显示" },
+          "gongan": { "type": "string", "maxLength": 100, "description": "公安备案号，空串表示不显示" },
           "hasLogo": { "type": "boolean" },
           "maxFileSize": { "type": "integer", "format": "int64", "description": "生效的单文件上限（字节）" },
           "maxFileSizeCap": { "type": "integer", "format": "int64", "description": "环境变量硬上限（字节）" },
@@ -661,6 +664,7 @@
         "properties": {
           "siteName": { "type": "string", "maxLength": 50 },
           "beian": { "type": "string", "maxLength": 100, "description": "备案号，空串表示不显示" },
+          "gongan": { "type": "string", "maxLength": 100, "description": "公安备案号，空串表示不显示" },
           "maxFileSize": { "type": "integer", "format": "int64", "description": "字节；≤0 恢复 env 默认" },
           "blockedExts": { "type": "array", "items": { "type": "string" } },
           "displayMode": { "type": "string", "enum": ["simple", "waybill"] },

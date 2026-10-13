@@ -70,9 +70,10 @@ export default function App() {
           }
         />
       </Routes>
-      {!isAdmin && settings?.beian && (
+      {!isAdmin && (settings?.beian || settings?.gongan) && (
         <footer className="site-footer">
-          <span>{settings.beian}</span>
+          {settings.beian && <span>{settings.beian}</span>}
+          {settings.gongan && <span>{settings.gongan}</span>}
         </footer>
       )}
     </Layout>

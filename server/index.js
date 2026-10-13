@@ -88,7 +88,8 @@ app.get('/api/health', (req, res) =>
       'publicIp',
       'customCode',
       'password',
-      'beian'
+      'beian',
+      'gongan'
     ]
   })
 )
@@ -128,6 +129,7 @@ function publicSettings(data) {
   return {
     siteName: settings.siteName,
     beian: settings.beian || '',
+    gongan: settings.gongan || '',
     hasLogo: Boolean(settings.logo) && Boolean(logoFilePath()),
     maxFileSize: effectiveMaxFileSize(),
     maxFileSizeCap: config.maxFileSize,

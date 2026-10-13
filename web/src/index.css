@@ -128,6 +128,10 @@ body {
 .site-footer {
   margin-top: auto;
   padding: 16px 24px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
   text-align: center;
   font-size: 13px;
   color: #8c8c8c;

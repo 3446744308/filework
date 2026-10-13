@@ -395,6 +395,36 @@ async function run() {
   const beianEmpty = await req('/api/settings')
   assert(beianEmpty.body.beian === '', '清空备案号', JSON.stringify(beianEmpty.body))
 
+  const putGongan = await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ siteName: '我的驿站', gongan: '粤公网安备 44030402000000号' })
+  })
+  assert(
+    putGongan.res.status === 200 && putGongan.body.settings.gongan === '粤公网安备 44030402000000号',
+    '保存公安备案号',
+    JSON.stringify(putGongan.body)
+  )
+  const gonganRead = await req('/api/settings')
+  assert(gonganRead.body.gongan === '粤公网安备 44030402000000号', '公安备案号读回', JSON.stringify(gonganRead.body))
+  const putGonganLong = await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ siteName: '我的驿站', gongan: '公'.repeat(200) })
+  })
+  assert(
+    putGonganLong.body.settings.gongan.length <= 100,
+    '超长公安备案号截断为 100',
+    String(putGonganLong.body.settings.gongan.length)
+  )
+  await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ siteName: '我的驿站', beian: '', gongan: '' })
+  })
+  const gonganEmpty = await req('/api/settings')
+  assert(gonganEmpty.body.gongan === '', '清空公安备案号', JSON.stringify(gonganEmpty.body))
+
   const longName = '站'.repeat(80)
   const putLong = await req('/api/settings', {
     method: 'PUT',

@@ -145,11 +145,12 @@
 `data/settings.json`（站点设置，单例）：
 
 ```json
-{ "siteName": "我的驿站", "beian": "粤ICP备2024000000号", "logo": ".png", "maxFileSize": 52428800, "blockedExts": ["php", "exe"], "displayMode": "simple", "customCodeEnabled": true, "updatedAt": 1760000000000 }
+{ "siteName": "我的驿站", "beian": "粤ICP备2024000000号", "gongan": "粤公网安备 44030402000000号", "logo": ".png", "maxFileSize": 52428800, "blockedExts": ["php", "exe"], "displayMode": "simple", "customCodeEnabled": true, "updatedAt": 1760000000000 }
 ```
 
 - `siteName` ≤ 50 字符，空字符串 = 使用默认名称（前端 fallback「文件驿站 · 匿名共享」）。
 - `beian` 备案号 ≤ 100 字符，空字符串 = 不显示；非空时公开页（非 `/admin`）底部页脚展示。
+- `gongan` 公安备案号 ≤ 100 字符，空字符串 = 不显示；非空时公开页底部页脚展示（与 ICP 备案号并排）。
 - `logo` 为扩展名（含点，如 `.png`），图片实体存于 `data/logo.<ext>`；空 = 未设置，前端不显示 logo。
 - `maxFileSize` 单文件大小上限（**字节**），`0` = 使用环境变量 `MAX_FILE_SIZE` 默认值；保存时钳制到 `[1MB, MAX_FILE_SIZE]`，生效值 = `min(存储值, MAX_FILE_SIZE)`（`effectiveMaxFileSize()`，env 值同时是硬上限与默认值）。
 - `blockedExts` 禁止上传的后缀黑名单（数组）；保存/读取均经 `normalizeExts`：小写、去前导点、过滤非 `^[a-z0-9]{1,20}$` 项、去重、最多 100 项。
@@ -182,8 +183,8 @@
 | `DELETE` | `/api/admin/:code` | 头 `x-admin-key` | `200` `{ ok: true }` |
 | `GET` | `/api/notice` | 无（公开） | `200` `{ enabled, title, content, display, updatedAt }` |
 | `PUT` | `/api/notice` | 头 `x-admin-key`，JSON body `{ enabled, title, content, display }` | `200` `{ ok: true, notice }` |
-| `GET` | `/api/settings` | 无（公开） | `200` `{ siteName, beian, hasLogo, maxFileSize, maxFileSizeCap, blockedExts, displayMode, customCodeEnabled, updatedAt }`（前两者为生效值与环境上限，单位字节） |
-| `PUT` | `/api/settings` | 头 `x-admin-key`，JSON body `{ siteName, beian, maxFileSize, blockedExts, displayMode, customCodeEnabled }`（maxFileSize ≤0 表示恢复默认；displayMode ∈ simple/waybill；customCodeEnabled 布尔） | `200` `{ ok: true, settings }` |
+| `GET` | `/api/settings` | 无（公开） | `200` `{ siteName, beian, gongan, hasLogo, maxFileSize, maxFileSizeCap, blockedExts, displayMode, customCodeEnabled, updatedAt }`（前两者为生效值与环境上限，单位字节） |
+| `PUT` | `/api/settings` | 头 `x-admin-key`，JSON body `{ siteName, beian, gongan, maxFileSize, blockedExts, displayMode, customCodeEnabled }`（maxFileSize ≤0 表示恢复默认；displayMode ∈ simple/waybill；customCodeEnabled 布尔） | `200` `{ ok: true, settings }` |
 | `POST` | `/api/settings/logo` | 头 `x-admin-key`，multipart `logo`（PNG/JPG/WebP/SVG/GIF/ICO，≤2MB） | `200` `{ ok: true, settings }`；非图片 400；超限 413 |
 | `DELETE` | `/api/settings/logo` | 头 `x-admin-key` | `200` `{ ok: true, settings }` |
 | `GET` | `/api/logo` | 无（公开） | `200` 图片流；未设置 404 |
@@ -198,10 +199,10 @@
 | `/d/:code` | Retrieve | 与发件页同构：`.page`（860px）宽卡片 + 左对齐 `Title`（取件 · 下载文件）/`Paragraph` 头部；取件码输入改为 `Modal` 弹窗（`destroyOnHidden`，`Input.OTP` 输满 6 位纯数字自动提交、回车/确定按钮均可，进入 `/d` 无码时自动弹出，空态/错误态/结果页均提供重新输入入口）；四类状态：加载中 `Spin` / 错误 `Alert`+重新输入按钮 / 空态 `Empty`+输入按钮 / 命中态；`displayMode==='waybill'` 时命中态渲染 `PickupWaybill`（取件回执：取件码栏+文件信息栏，含备注），`page-wide` 宽卡片；简约模式仍用 antd `Result`（status=success：标题「文件已就绪」、subTitle 文件名 break-all、extra 用 `.result-hero` 承载 `.stat-row` 统计卡，灰底 content 区放下载按钮、有效期提示与「换个取件码」；`.ant-result.retrieve-result` 紧凑样式压缩图标/标题/内边距；≤480px 移动端进一步自适应（页面与卡片边距收紧、统计卡 2 列/≤360px 单列、下载按钮整行、图标 36px、OTP 高度 44px），防止小屏内容溢出视口） |
 | `/admin` | Admin | 管理端外壳 `AdminShell`（未登录渲染双栏登录页）；**仪表盘**（有效文件/总大小/累计下载/累计上传）+ **公告设置**（开关 / 显示方式：弹窗·顶部公告条·两者 / 标题 / 内容） |
 | `/admin/files` | AdminFiles | 独立**文件管理**页：搜索过滤（取件码/文件名/备注）、备注列、多选批量删除、下载进度条、剩余时间、可调分页（10/20/50/100） |
-| `/admin/settings` | AdminSettings | **站点设置**页：站点名称（Input ≤50，留空用默认）+ **备案号**（Input ≤100，可选，留空不显示）+ Logo（上传/更换/删除，可选，未设置不显示）+ **单文件上传大小上限**（InputNumber 1–MAX_FILE_SIZE MB，默认 env 值）+ **禁止上传的文件类型**（Select tags，后缀黑名单）+ **前端显示样式**（Select：简约版 simple / 快递面单 waybill）+ **自定义取件码开关**（Switch，控制发件页是否显示自定义码输入框），保存后通过 `refreshSettings()` 通知全站刷新 |
+| `/admin/settings` | AdminSettings | **站点设置**页：站点名称（Input ≤50，留空用默认）+ **备案号**（Input ≤100，可选，留空不显示）+ **公安备案号**（Input ≤100，可选，留空不显示）+ Logo（上传/更换/删除，可选，未设置不显示）+ **单文件上传大小上限**（InputNumber 1–MAX_FILE_SIZE MB，默认 env 值）+ **禁止上传的文件类型**（Select tags，后缀黑名单）+ **前端显示样式**（Select：简约版 simple / 快递面单 waybill）+ **自定义取件码开关**（Switch，控制发件页是否显示自定义码输入框），保存后通过 `refreshSettings()` 通知全站刷新 |
 
 **UI 约定**：
-- **布局分区**：公共顶部菜单栏（`.site-header`，**logo（如有）+ 站点名称** + 上传/取件菜单）**仅在非 `/admin` 路由渲染**（`App.jsx` 按 `isAdmin` 判断），公共页在 header 下渲染 `NoticeBar` 顶部公告条（**文字超出视口宽度时自动无缝滚动**：`scrollWidth > clientWidth` 触发，两份副本 `translateX(-50%)` 循环，时长按内容宽/60px/s 计算且 ≥6s，悬停暂停，窗口 resize 重测）；`document.title` 同步为站点名称。站点设置通过 `useSettings()` 模块级缓存订阅（保存后 `refreshSettings()` 通知所有消费方）；`settings.beian` 非空时，公开页（非 `/admin`）底部渲染 `.site-footer` 备案号页脚（空则不渲染，`marginTop:auto` 吸底）。管理端统一由 `AdminShell` 渲染为**左侧边栏布局**（`.admin-layout`）：未登录 → 双栏登录页；已登录 → 深色侧边栏（品牌（logo/站点名） / **仪表盘 · 文件管理 · 设置**菜单 / 返回首页 · 退出，宽 220px，可折叠至 72px，≤768px 自动折叠）+ 右侧内容区（`.admin-inner`，**max-width 1400px**，仪表盘与表格使用整宽），`/admin`、`/admin/files`、`/admin/settings` 共用该外壳，不与主页共用菜单。
+- **布局分区**：公共顶部菜单栏（`.site-header`，**logo（如有）+ 站点名称** + 上传/取件菜单）**仅在非 `/admin` 路由渲染**（`App.jsx` 按 `isAdmin` 判断），公共页在 header 下渲染 `NoticeBar` 顶部公告条（**文字超出视口宽度时自动无缝滚动**：`scrollWidth > clientWidth` 触发，两份副本 `translateX(-50%)` 循环，时长按内容宽/60px/s 计算且 ≥6s，悬停暂停，窗口 resize 重测）；`document.title` 同步为站点名称。站点设置通过 `useSettings()` 模块级缓存订阅（保存后 `refreshSettings()` 通知所有消费方）；`settings.beian` / `settings.gongan` 任一非空时，公开页（非 `/admin`）底部渲染 `.site-footer` 备案页脚（均空则不渲染；flex 并排、`marginTop:auto` 吸底，无背景色）。管理端统一由 `AdminShell` 渲染为**左侧边栏布局**（`.admin-layout`）：未登录 → 双栏登录页；已登录 → 深色侧边栏（品牌（logo/站点名） / **仪表盘 · 文件管理 · 设置**菜单 / 返回首页 · 退出，宽 220px，可折叠至 72px，≤768px 自动折叠）+ 右侧内容区（`.admin-inner`，**max-width 1400px**，仪表盘与表格使用整宽），`/admin`、`/admin/files`、`/admin/settings` 共用该外壳，不与主页共用菜单。
 - 使用 Ant Design 全量引入（`import { App as AntApp } from 'antd'` 统一 message/notification）。
 - 中文文案，`dayjs` 时间格式 `YYYY-MM-DD HH:mm`。
 - 页面标题统一在 `App.jsx` 布局中，不在各页重复。
