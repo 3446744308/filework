@@ -39,7 +39,7 @@
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
                 "example": {
                   "ok": true,
-                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password"]
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian"]
                 }
               }
             }
@@ -61,6 +61,7 @@
                 "schema": { "$ref": "#/components/schemas/Settings" },
                 "example": {
                   "siteName": "我的驿站",
+                  "beian": "粤ICP备2024000000号",
                   "hasLogo": true,
                   "maxFileSize": 104857600,
                   "maxFileSizeCap": 104857600,
@@ -87,6 +88,7 @@
               "schema": { "$ref": "#/components/schemas/SettingsUpdate" },
               "example": {
                 "siteName": "我的驿站",
+                "beian": "粤ICP备2024000000号",
                 "maxFileSize": 52428800,
                 "blockedExts": ["exe", "php"],
                 "displayMode": "waybill",
@@ -644,11 +646,12 @@
         "type": "object",
         "properties": {
           "siteName": { "type": "string", "maxLength": 50, "description": "站点名称，空串表示默认名" },
+          "beian": { "type": "string", "maxLength": 100, "description": "备案号，空串表示不显示" },
           "hasLogo": { "type": "boolean" },
           "maxFileSize": { "type": "integer", "format": "int64", "description": "生效的单文件上限（字节）" },
           "maxFileSizeCap": { "type": "integer", "format": "int64", "description": "环境变量硬上限（字节）" },
           "blockedExts": { "type": "array", "items": { "type": "string" }, "description": "禁止上传的后缀（无点、小写）" },
-          "displayMode": { "type": "string", "enum": ["simple", "waybill"], "description": "发件成功页显示模式" },
+          "displayMode": { "type": "string", "enum": ["simple", "waybill"], "description": "前端显示样式" },
           "customCodeEnabled": { "type": "boolean", "description": "是否允许自定义取件码" },
           "updatedAt": { "type": "integer", "format": "int64" }
         }
@@ -657,6 +660,7 @@
         "type": "object",
         "properties": {
           "siteName": { "type": "string", "maxLength": 50 },
+          "beian": { "type": "string", "maxLength": 100, "description": "备案号，空串表示不显示" },
           "maxFileSize": { "type": "integer", "format": "int64", "description": "字节；≤0 恢复 env 默认" },
           "blockedExts": { "type": "array", "items": { "type": "string" } },
           "displayMode": { "type": "string", "enum": ["simple", "waybill"] },

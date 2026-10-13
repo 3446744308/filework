@@ -59,7 +59,7 @@ GET /api/health
   "features": [
     "siteSettings", "maxFileSize", "blockedExts",
     "noticeDisplay", "displayMode", "waybill",
-    "publicIp", "customCode", "password"
+    "publicIp", "customCode", "password", "beian"
   ]
 }
 ```
@@ -79,6 +79,7 @@ GET /api/settings
 ```json
 {
   "siteName": "我的驿站",
+  "beian": "粤ICP备2024000000号",
   "hasLogo": true,
   "maxFileSize": 104857600,
   "maxFileSizeCap": 104857600,
@@ -92,6 +93,7 @@ GET /api/settings
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `siteName` | string | 站点名称，空串表示使用默认名 |
+| `beian` | string | 备案号，空串表示不显示 |
 | `hasLogo` | boolean | 是否已设置站点 Logo |
 | `maxFileSize` | number | 生效的单文件上限（字节） |
 | `maxFileSizeCap` | number | 环境变量硬上限（字节），`maxFileSize ≤ maxFileSizeCap` |
@@ -433,6 +435,7 @@ PUT Body（字段均可选，只传需要改的）：
 ```json
 {
   "siteName": "我的驿站",
+  "beian": "粤ICP备2024000000号",
   "maxFileSize": 52428800,
   "blockedExts": ["exe", "php"],
   "displayMode": "waybill",
@@ -443,6 +446,7 @@ PUT Body（字段均可选，只传需要改的）：
 | 字段 | 约束 |
 |---|---|
 | `siteName` | ≤50 字符；空串恢复默认名 |
+| `beian` | ≤100 字符；空串不显示备案号 |
 | `maxFileSize` | 字节；`≤0` 恢复 env 默认；保存时钳制到 `[1MB, MAX_FILE_SIZE]` |
 | `blockedExts` | string[]；服务端会规范化（小写/去点/过滤非法/去重/最多 100） |
 | `displayMode` | `simple` / `waybill`，非法回退 `simple` |

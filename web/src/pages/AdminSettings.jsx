@@ -30,6 +30,7 @@ export default function AdminSettings() {
   const { message } = AntApp.useApp()
   const settings = useSettings()
   const [siteName, setSiteName] = useState('')
+  const [beian, setBeian] = useState('')
   const [maxSizeMb, setMaxSizeMb] = useState(null)
   const [blockedExts, setBlockedExts] = useState([])
   const [displayMode, setDisplayMode] = useState('simple')
@@ -40,6 +41,7 @@ export default function AdminSettings() {
   useEffect(() => {
     if (settings) {
       setSiteName(settings.siteName || '')
+      setBeian(settings.beian || '')
       setMaxSizeMb(Math.max(1, Math.round(settings.maxFileSize / MB)))
       setBlockedExts(settings.blockedExts || [])
       setDisplayMode(settings.displayMode === 'waybill' ? 'waybill' : 'simple')
@@ -62,7 +64,7 @@ export default function AdminSettings() {
       const mb = Number(maxSizeMb)
       const maxFileSize = Number.isFinite(mb) && mb > 0 ? Math.round(mb) * MB : 0
       await api.saveSettings(
-        { siteName, maxFileSize, blockedExts, displayMode, customCodeEnabled },
+        { siteName, beian, maxFileSize, blockedExts, displayMode, customCodeEnabled },
         getAdminKey()
       )
       message.success('设置已保存')
@@ -132,6 +134,26 @@ export default function AdminSettings() {
             </Space.Compact>
             <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
               显示于页面顶部与浏览器标签页；留空则使用默认名称「文件驿站 · 匿名共享」。
+            </Typography.Paragraph>
+          </div>
+
+          <div>
+            <Typography.Title level={5}>备案号（可选）</Typography.Title>
+            <Space.Compact style={{ width: '100%', maxWidth: 480 }}>
+              <Input
+                value={beian}
+                onChange={(e) => setBeian(e.target.value)}
+                maxLength={100}
+                showCount
+                placeholder="如：粤ICP备2024000000号"
+                onPressEnter={save}
+              />
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存
+              </Button>
+            </Space.Compact>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              显示在公开页面底部；留空则不显示备案号。
             </Typography.Paragraph>
           </div>
 
@@ -214,7 +236,7 @@ export default function AdminSettings() {
           </div>
 
           <div>
-            <Typography.Title level={5}>发件成功显示模式</Typography.Title>
+            <Typography.Title level={5}>前端显示样式</Typography.Title>
             <Space.Compact style={{ width: '100%', maxWidth: 320 }}>
               <Select
                 value={displayMode}

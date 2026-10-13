@@ -365,6 +365,36 @@ async function run() {
   const setRead = await req('/api/settings')
   assert(setRead.body.siteName === '我的驿站', '站点名称读回', JSON.stringify(setRead.body))
 
+  const putBeian = await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ siteName: '我的驿站', beian: '粤ICP备2024000000号' })
+  })
+  assert(
+    putBeian.res.status === 200 && putBeian.body.settings.beian === '粤ICP备2024000000号',
+    '保存备案号',
+    JSON.stringify(putBeian.body)
+  )
+  const beianRead = await req('/api/settings')
+  assert(beianRead.body.beian === '粤ICP备2024000000号', '备案号读回', JSON.stringify(beianRead.body))
+  const putBeianClear = await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ siteName: '我的驿站', beian: '备'.repeat(200) })
+  })
+  assert(
+    putBeianClear.body.settings.beian.length <= 100,
+    '超长备案号截断为 100',
+    String(putBeianClear.body.settings.beian.length)
+  )
+  await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ siteName: '我的驿站', beian: '' })
+  })
+  const beianEmpty = await req('/api/settings')
+  assert(beianEmpty.body.beian === '', '清空备案号', JSON.stringify(beianEmpty.body))
+
   const longName = '站'.repeat(80)
   const putLong = await req('/api/settings', {
     method: 'PUT',

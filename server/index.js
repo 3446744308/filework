@@ -87,7 +87,8 @@ app.get('/api/health', (req, res) =>
       'waybill',
       'publicIp',
       'customCode',
-      'password'
+      'password',
+      'beian'
     ]
   })
 )
@@ -126,6 +127,7 @@ function publicSettings(data) {
   const settings = data || getSettings()
   return {
     siteName: settings.siteName,
+    beian: settings.beian || '',
     hasLogo: Boolean(settings.logo) && Boolean(logoFilePath()),
     maxFileSize: effectiveMaxFileSize(),
     maxFileSizeCap: config.maxFileSize,

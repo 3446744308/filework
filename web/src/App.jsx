@@ -70,6 +70,11 @@ export default function App() {
           }
         />
       </Routes>
+      {!isAdmin && settings?.beian && (
+        <footer className="site-footer">
+          <span>{settings.beian}</span>
+        </footer>
+      )}
     </Layout>
   )
 }
