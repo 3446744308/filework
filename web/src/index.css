@@ -125,6 +125,17 @@ body {
   border-radius: 4px;
 }
 
+.menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menu-more-arrow {
+  font-size: 10px;
+  color: #8c8c8c;
+}
+
 .site-footer {
   margin-top: auto;
   padding: 16px 24px;

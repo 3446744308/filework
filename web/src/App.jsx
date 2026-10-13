@@ -1,30 +1,94 @@
 import React, { useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Layout, Menu, Typography } from 'antd'
+import {
+  DownOutlined,
+  DownloadOutlined,
+  InfoCircleOutlined,
+  MessageOutlined,
+  MoreOutlined,
+  SendOutlined
+} from '@ant-design/icons'
 import Upload from './pages/Upload.jsx'
 import Retrieve from './pages/Retrieve.jsx'
 import Admin from './pages/Admin.jsx'
 import AdminFiles from './pages/AdminFiles.jsx'
 import AdminSettings from './pages/AdminSettings.jsx'
+import About from './pages/About.jsx'
+import Feedback from './pages/Feedback.jsx'
 import NoticeBar from './components/NoticeBar.jsx'
 import { useSettings, logoUrlOf } from './hooks/useSettings.js'
 
 const items = [
-  { key: '/', label: <Link to="/">上传文件</Link> },
-  { key: '/d', label: <Link to="/d">输入取件码</Link> }
+  {
+    key: '/',
+    label: (
+      <Link to="/" className="menu-item-label">
+        <SendOutlined />
+        上传文件
+      </Link>
+    )
+  },
+  {
+    key: '/d',
+    label: (
+      <Link to="/d" className="menu-item-label">
+        <DownloadOutlined />
+        输入取件码
+      </Link>
+    )
+  },
+  {
+    key: 'more',
+    label: (
+      <span className="menu-item-label">
+        <MoreOutlined />
+        其他
+        <DownOutlined className="menu-more-arrow" />
+      </span>
+    ),
+    children: [
+      {
+        key: '/about',
+        label: (
+          <Link to="/about" className="menu-item-label">
+            <InfoCircleOutlined />
+            关于
+          </Link>
+        )
+      },
+      {
+        key: '/feedback',
+        label: (
+          <Link to="/feedback" className="menu-item-label">
+            <MessageOutlined />
+            反馈
+          </Link>
+        )
+      }
+    ]
+  }
 ]
+
+function matchSelected(pathname) {
+  let selected = ''
+  for (const item of items) {
+    if (item.children) {
+      for (const child of item.children) {
+        if (pathname === child.key || pathname.startsWith(child.key + '/')) selected = child.key
+      }
+    } else if (item.key === '/' ? pathname === '/' : pathname.startsWith(item.key)) {
+      selected = item.key
+    }
+  }
+  return selected
+}
 
 export default function App() {
   const location = useLocation()
   const settings = useSettings()
   const isAdmin = location.pathname.startsWith('/admin')
-  const selected =
-    items
-      .map((i) => i.key)
-      .filter((key) =>
-        key === '/' ? location.pathname === '/' : location.pathname.startsWith(key)
-      )
-      .pop() || ''
+  const selected = matchSelected(location.pathname)
   const siteName = settings?.siteName || '文件驿站 · 匿名共享'
   const logoUrl = logoUrlOf(settings)
 
@@ -57,6 +121,8 @@ export default function App() {
         <Route path="/" element={<Upload />} />
         <Route path="/d" element={<Retrieve />} />
         <Route path="/d/:code" element={<Retrieve />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/feedback" element={<Feedback />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/files" element={<AdminFiles />} />
         <Route path="/admin/settings" element={<AdminSettings />} />

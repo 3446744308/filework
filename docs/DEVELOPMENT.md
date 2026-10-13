@@ -62,6 +62,8 @@
 │       └── pages/
 │           ├── Upload.jsx        # 上传页（首页）+ 公告弹窗
 │           ├── Retrieve.jsx      # 取件页 /d/:code
+│           ├── About.jsx         # 关于页 /about（产品简介与使用说明）
+│           ├── Feedback.jsx      # 反馈页 /feedback（表单，提交后内容复制到剪贴板）
 │           ├── Admin.jsx         # 仪表盘 + 公告设置 /admin
 │           ├── AdminFiles.jsx    # 文件管理 /admin/files
 │           └── AdminSettings.jsx # 站点设置（名称/Logo/大小上限/黑名单/显示模式）/admin/settings
@@ -197,12 +199,14 @@
 |---|---|---|
 | `/` | Upload | **三步发件流程**（antd `Steps`）：①**上传文件** = `Upload.Dragger` 单文件 + 自定义已选文件卡片（类型图标/名称/大小/删除），点「下一步」进入 ②**填写收件信息** = 已选文件展示 + 有效期/次数下拉 + **自定义取件码**（选填 6 位数字，受 `customCodeEnabled` 开关控制，被占用时 `Modal.confirm` 询问是否自动生成）+ 选填备注 `Input.TextArea`（≤200），「上一步」/「确认发件」（此时才真正 `POST /api/upload`，上传中显示进度条）；成功后 ③**发件回执** = 按 `settings.displayMode` 分支：**简约版** = antd `Result`（取件码与二维码、复制操作、文件信息）；**快递面单**（`WaybillReceipt`）= 品牌/发件时间/面单号/条码/三列虚线分栏/四格承诺/打印与发送（寄件方 IP 优先取 `/api/ip` 公网地址，失败回退 `clientIp`；寄件方「文件备注」展示 `note`）；回执页均有「继续发件/返回首页」；进入首页拉取 `/api/notice`；上传前按 `settings.maxFileSize` 与 `blockedExts` 预检 |
 | `/d/:code` | Retrieve | 与发件页同构：`.page`（860px）宽卡片 + 左对齐 `Title`（取件 · 下载文件）/`Paragraph` 头部；取件码输入改为 `Modal` 弹窗（`destroyOnHidden`，`Input.OTP` 输满 6 位纯数字自动提交、回车/确定按钮均可，进入 `/d` 无码时自动弹出，空态/错误态/结果页均提供重新输入入口）；四类状态：加载中 `Spin` / 错误 `Alert`+重新输入按钮 / 空态 `Empty`+输入按钮 / 命中态；`displayMode==='waybill'` 时命中态渲染 `PickupWaybill`（取件回执：取件码栏+文件信息栏，含备注），`page-wide` 宽卡片；简约模式仍用 antd `Result`（status=success：标题「文件已就绪」、subTitle 文件名 break-all、extra 用 `.result-hero` 承载 `.stat-row` 统计卡，灰底 content 区放下载按钮、有效期提示与「换个取件码」；`.ant-result.retrieve-result` 紧凑样式压缩图标/标题/内边距；≤480px 移动端进一步自适应（页面与卡片边距收紧、统计卡 2 列/≤360px 单列、下载按钮整行、图标 36px、OTP 高度 44px），防止小屏内容溢出视口） |
+| `/about` | About | **关于页**：`.page` 宽卡片，站点简介（读 `settings.siteName`）、如何使用、主要特性、限制说明，尾部引导去「其他 → 反馈」 |
+| `/feedback` | Feedback | **反馈页**：`.page` 宽卡片 + `Form`（类型 Select：bug/功能建议/其他、联系方式选填 ≤100、内容 TextArea 必填 ≤2000）；提交后把格式化反馈文本 `navigator.clipboard.writeText` 复制到剪贴板并提示用户发给管理员，复制失败时 `Modal` 展示文本供手动复制（无后端存储） |
 | `/admin` | Admin | 管理端外壳 `AdminShell`（未登录渲染双栏登录页）；**仪表盘**（有效文件/总大小/累计下载/累计上传）+ **公告设置**（开关 / 显示方式：弹窗·顶部公告条·两者 / 标题 / 内容） |
 | `/admin/files` | AdminFiles | 独立**文件管理**页：搜索过滤（取件码/文件名/备注）、备注列、多选批量删除、下载进度条、剩余时间、可调分页（10/20/50/100） |
 | `/admin/settings` | AdminSettings | **站点设置**页：站点名称（Input ≤50，留空用默认）+ **备案号**（Input ≤100，可选，留空不显示）+ **公安备案号**（Input ≤100，可选，留空不显示）+ Logo（上传/更换/删除，可选，未设置不显示）+ **单文件上传大小上限**（InputNumber 1–MAX_FILE_SIZE MB，默认 env 值）+ **禁止上传的文件类型**（Select tags，后缀黑名单）+ **前端显示样式**（Select：简约版 simple / 快递面单 waybill）+ **自定义取件码开关**（Switch，控制发件页是否显示自定义码输入框），保存后通过 `refreshSettings()` 通知全站刷新 |
 
 **UI 约定**：
-- **布局分区**：公共顶部菜单栏（`.site-header`，**logo（如有）+ 站点名称** + 上传/取件菜单）**仅在非 `/admin` 路由渲染**（`App.jsx` 按 `isAdmin` 判断），公共页在 header 下渲染 `NoticeBar` 顶部公告条（**文字超出视口宽度时自动无缝滚动**：`scrollWidth > clientWidth` 触发，两份副本 `translateX(-50%)` 循环，时长按内容宽/60px/s 计算且 ≥6s，悬停暂停，窗口 resize 重测）；`document.title` 同步为站点名称。站点设置通过 `useSettings()` 模块级缓存订阅（保存后 `refreshSettings()` 通知所有消费方）；`settings.beian` / `settings.gongan` 任一非空时，公开页（非 `/admin`）底部渲染 `.site-footer` 备案页脚（flex 并排、`marginTop:auto` 吸底，无背景色；ICP 前缀 `web/public/icons/icp.webp` 图标，公安前缀 `web/public/icons/gonganbeian.png` 图标，`.site-footer-icon` 16px）；页脚始终显示版权行 `.site-footer-copy`：`© 2025-{当前年份} YayaLe, KunFanLe. All Rights Reserved.`（年份取 `new Date().getFullYear()`，下限 2026，自动滚动更新）。管理端统一由 `AdminShell` 渲染为**左侧边栏布局**（`.admin-layout`）：未登录 → 双栏登录页；已登录 → 深色侧边栏（品牌（logo/站点名） / **仪表盘 · 文件管理 · 设置**菜单 / 返回首页 · 退出，宽 220px，可折叠至 72px，≤768px 自动折叠）+ 右侧内容区（`.admin-inner`，**max-width 1400px**，仪表盘与表格使用整宽），`/admin`、`/admin/files`、`/admin/settings` 共用该外壳，不与主页共用菜单。
+- **布局分区**：公共顶部菜单栏（`.site-header`，**logo（如有）+ 站点名称** + 上传文件 / 输入取件码 / **其他**（一级下拉：关于 `/about` · 反馈 `/feedback`）菜单，每项前置 `@ant-design/icons` 图标（`SendOutlined` / `DownloadOutlined` / `MoreOutlined`+`DownOutlined` / `InfoCircleOutlined` / `MessageOutlined`，`.menu-item-label` 对齐））**仅在非 `/admin` 路由渲染**（`App.jsx` 按 `isAdmin` 判断），公共页在 header 下渲染 `NoticeBar` 顶部公告条（**文字超出视口宽度时自动无缝滚动**：`scrollWidth > clientWidth` 触发，两份副本 `translateX(-50%)` 循环，时长按内容宽/60px/s 计算且 ≥6s，悬停暂停，窗口 resize 重测）；`document.title` 同步为站点名称。站点设置通过 `useSettings()` 模块级缓存订阅（保存后 `refreshSettings()` 通知所有消费方）；`settings.beian` / `settings.gongan` 任一非空时，公开页（非 `/admin`）底部渲染 `.site-footer` 备案页脚（flex 并排、`marginTop:auto` 吸底，无背景色；ICP 前缀 `web/public/icons/icp.webp` 图标，公安前缀 `web/public/icons/gonganbeian.png` 图标，`.site-footer-icon` 16px）；页脚始终显示版权行 `.site-footer-copy`：`© 2025-{当前年份} YayaLe, KunFanLe. All Rights Reserved.`（年份取 `new Date().getFullYear()`，下限 2026，自动滚动更新）。管理端统一由 `AdminShell` 渲染为**左侧边栏布局**（`.admin-layout`）：未登录 → 双栏登录页；已登录 → 深色侧边栏（品牌（logo/站点名） / **仪表盘 · 文件管理 · 设置**菜单 / 返回首页 · 退出，宽 220px，可折叠至 72px，≤768px 自动折叠）+ 右侧内容区（`.admin-inner`，**max-width 1400px**，仪表盘与表格使用整宽），`/admin`、`/admin/files`、`/admin/settings` 共用该外壳，不与主页共用菜单。
 - 使用 Ant Design 全量引入（`import { App as AntApp } from 'antd'` 统一 message/notification）。
 - 中文文案，`dayjs` 时间格式 `YYYY-MM-DD HH:mm`。
 - 页面标题统一在 `App.jsx` 布局中，不在各页重复。
@@ -222,7 +226,7 @@
 1. **改后端**：改 `server/*.js` → `npm test` 必须通过。
 2. **改前端**：改 `web/src/**` → `npm run build` 无报错 → 手动走一遍 `/`、`/d/码`、`/admin`。
 3. **新增接口**：必须同步更新本文件第 7 节契约表 + `scripts/test.js` 增加用例。
-4. **新增依赖**：优先零依赖实现；确需依赖时记录在本文档第 2 节。
+4. **新增依赖**：优先零依赖实现；确需依赖时用 `npm install <pkg>` 安装（会自动写入 `package.json` 与 `package-lock.json`），并记录在本文档第 2 节。**严禁**手工往 `node_modules` 塞包或只改代码不更新清单——否则其他环境 `npm install` 会缺依赖。移除依赖用 `npm uninstall <pkg>` 同步清理。
 5. **代码风格**：ESM、2 空格缩进、单引号、分号结尾；不写行内注释（文档即注释来源）。
 
 ## 11. 部署
