@@ -716,6 +716,126 @@ async function run() {
     JSON.stringify(ipRes.body)
   )
 
+  console.log('\n[17] 意见反馈')
+  const fbEmpty = await req('/api/feedback', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'bug', content: '' })
+  })
+  assert(fbEmpty.res.status === 400, '空内容提交返回 400', `实际 ${fbEmpty.res.status}`)
+
+  const fb1 = await req('/api/feedback', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'bug', contact: 'test@qq.com', content: '下载偶发失败' })
+  })
+  assert(
+    fb1.res.status === 201 && fb1.body.ok && fb1.body.id && /^FB-\d{8}$/.test(fb1.body.code || ''),
+    '提交反馈成功返回 201、id 与 FB- 前缀反馈号',
+    JSON.stringify(fb1.body)
+  )
+
+  const fbQueryBad = await req('/api/feedback/query?code=123')
+  assert(fbQueryBad.res.status === 400, '非法反馈号格式返回 400', `实际 ${fbQueryBad.res.status}`)
+  const fbQueryNone = await req('/api/feedback/query?code=FB-99999999')
+  assert(fbQueryNone.res.status === 404, '不存在的反馈号返回 404', `实际 ${fbQueryNone.res.status}`)
+  const fbQueryLower = await req(`/api/feedback/query?code=${fb1.body.code.toLowerCase()}`)
+  assert(
+    fbQueryLower.res.status === 200 && fbQueryLower.body.code === fb1.body.code,
+    '小写反馈号查询自动转大写',
+    JSON.stringify(fbQueryLower.body)
+  )
+  const fbQuery = await req(`/api/feedback/query?code=${fb1.body.code}`)
+  assert(
+    fbQuery.res.status === 200 &&
+      fbQuery.body.code === fb1.body.code &&
+      fbQuery.body.status === 'pending' &&
+      fbQuery.body.content === '下载偶发失败' &&
+      !('contact' in fbQuery.body) &&
+      !('id' in fbQuery.body),
+    '凭反馈号查询成功且不泄露 contact/id',
+    JSON.stringify(fbQuery.body)
+  )
+
+  const fb2 = await req('/api/feedback', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'hacker', content: '非法类型回退 other' })
+  })
+  assert(fb2.res.status === 201, '非法类型回退 other 仍可提交', `实际 ${fb2.res.status}`)
+
+  const fbNoKey = await req('/api/admin/feedback')
+  assert(fbNoKey.res.status === 401, '无密钥查看反馈返回 401', `实际 ${fbNoKey.res.status}`)
+
+  const fbList = await req('/api/admin/feedback', { headers: { 'x-admin-key': ADMIN_KEY } })
+  const fbIds = (fbList.body.list || []).map((f) => f.id)
+  assert(
+    fbList.res.status === 200 && fbIds.includes(fb1.body.id) && fbIds.includes(fb2.body.id),
+    '管理员列表包含新提交的反馈',
+    JSON.stringify(fbIds)
+  )
+  const fbItem = fbList.body.list.find((f) => f.id === fb1.body.id)
+  assert(
+    fbItem.status === 'pending' && fbItem.type === 'bug' && fbItem.contact === 'test@qq.com',
+    '反馈字段完整且默认状态为等待中',
+    JSON.stringify(fbItem)
+  )
+  assert(
+    typeof fbItem.code === 'string' && /^FB-\d{8}$/.test(fbItem.code),
+    '管理员列表包含 FB- 前缀反馈号',
+    String(fbItem.code)
+  )
+
+  const fbProc = await req(`/api/admin/feedback/${fb1.body.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ status: 'processing' })
+  })
+  assert(
+    fbProc.res.status === 200 && fbProc.body.feedback.status === 'processing',
+    '状态更新为处理中',
+    JSON.stringify(fbProc.body)
+  )
+  const fbBadStatus = await req(`/api/admin/feedback/${fb1.body.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ status: 'hacker' })
+  })
+  assert(fbBadStatus.res.status === 400, '非法状态返回 400', `实际 ${fbBadStatus.res.status}`)
+  const fbDone = await req(`/api/admin/feedback/${fb1.body.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ status: 'done' })
+  })
+  assert(
+    fbDone.res.status === 200 && fbDone.body.feedback.status === 'done',
+    '状态更新为已完成',
+    JSON.stringify(fbDone.body)
+  )
+
+  for (const id of [fb1.body.id, fb2.body.id]) {
+    const del = await req(`/api/admin/feedback/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-key': ADMIN_KEY }
+    })
+    assert(del.res.status === 200 && del.body.ok, `删除反馈 ${id}`, JSON.stringify(del.body))
+  }
+  const fbAfter = await req('/api/admin/feedback', { headers: { 'x-admin-key': ADMIN_KEY } })
+  const fbAfterIds = (fbAfter.body.list || []).map((f) => f.id)
+  assert(
+    !fbAfterIds.includes(fb1.body.id) && !fbAfterIds.includes(fb2.body.id),
+    '删除后列表不再包含',
+    JSON.stringify(fbAfterIds)
+  )
+  const fbDelGone = await req(`/api/admin/feedback/${fb1.body.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ status: 'processing' })
+  })
+  assert(fbDelGone.res.status === 404, '已删除反馈更新状态返回 404', `实际 ${fbDelGone.res.status}`)
+  const fbQueryGone = await req(`/api/feedback/query?code=${fb1.body.code}`)
+  assert(fbQueryGone.res.status === 404, '删除后凭反馈号查询返回 404', `实际 ${fbQueryGone.res.status}`)
+
   console.log(`\n结果: ${passed} 通过, ${failed} 失败`)
   server.kill('SIGTERM')
   fs.rmSync(DATA_DIR, { recursive: true, force: true })

@@ -53,6 +53,7 @@ export const config = {
   metaDir: path.join(dataDir, 'meta'),
   filesDir: path.join(dataDir, 'files'),
   tmpDir: path.join(dataDir, 'tmp'),
+  feedbackDir: path.join(dataDir, 'feedback'),
   maxFileSize: intEnv('MAX_FILE_SIZE', 100 * 1024 * 1024),
   defaultExpiresIn: intEnv('DEFAULT_EXPIRE_HOURS', 24),
   defaultMaxDownloads: intEnv('DEFAULT_MAX_DOWNLOADS', 5),
@@ -64,7 +65,7 @@ export const config = {
 }
 
 export function ensureDirs() {
-  for (const dir of [config.metaDir, config.filesDir, config.tmpDir]) {
+  for (const dir of [config.metaDir, config.filesDir, config.tmpDir, config.feedbackDir]) {
     fs.mkdirSync(dir, { recursive: true })
   }
 }

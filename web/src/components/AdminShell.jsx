@@ -6,6 +6,7 @@ import {
   HomeOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MessageOutlined,
   SafetyCertificateOutlined,
   SettingOutlined
 } from '@ant-design/icons'
@@ -20,6 +21,11 @@ const MENU_ITEMS = [
     key: '/admin/files',
     icon: <FolderOpenOutlined />,
     label: <Link to="/admin/files">文件管理</Link>
+  },
+  {
+    key: '/admin/feedback',
+    icon: <MessageOutlined />,
+    label: <Link to="/admin/feedback">反馈管理</Link>
   },
   {
     key: '/admin/settings',
@@ -44,9 +50,11 @@ export default function AdminShell({ children }) {
 
   const selected = location.pathname.startsWith('/admin/files')
     ? '/admin/files'
-    : location.pathname.startsWith('/admin/settings')
-      ? '/admin/settings'
-      : '/admin'
+    : location.pathname.startsWith('/admin/feedback')
+      ? '/admin/feedback'
+      : location.pathname.startsWith('/admin/settings')
+        ? '/admin/settings'
+        : '/admin'
   const sidebarLogo = logoUrlOf(settings)
 
   return (

@@ -59,7 +59,7 @@ GET /api/health
   "features": [
     "siteSettings", "maxFileSize", "blockedExts",
     "noticeDisplay", "displayMode", "waybill",
-    "publicIp", "customCode", "password", "beian", "gongan"
+    "publicIp", "customCode", "password", "beian", "gongan", "feedback"
   ]
 }
 ```
@@ -304,6 +304,60 @@ GET /api/download?code=832451&password=secret123
 
 ---
 
+### 2.10 提交意见反馈
+
+```
+POST /api/feedback
+Content-Type: application/json
+```
+
+Body：
+
+```json
+{
+  "type": "bug",
+  "contact": "test@qq.com",
+  "content": "下载偶发失败"
+}
+```
+
+| 字段 | 约束 |
+|---|---|
+| `type` | `bug` / `feature` / `other`，非法回退 `other` |
+| `contact` | ≤100 字符，可空 |
+| `content` | **必填** ≤2000 字符 |
+
+**响应 201**：`{ "ok": true, "id": "1760000000000-a1b2c3d4", "code": "FB-24815302" }`（`code` 为反馈号，用户凭此查询进度）  
+**错误**：`400` 内容为空 / `429` 限流（与上传同限流器）。
+
+---
+
+### 2.11 查询反馈进度
+
+```
+GET /api/feedback/query?code=FB-24815302
+```
+
+凭提交时返回的反馈号（`FB-` + 8 位数字，大小写不敏感）查询处理状态。
+
+**响应 200**
+
+```json
+{
+  "code": "FB-24815302",
+  "type": "bug",
+  "content": "下载偶发失败",
+  "status": "pending",
+  "createdAt": 1760000000000,
+  "updatedAt": 1760000000000
+}
+```
+
+`status`：`pending` 等待中 / `processing` 处理中 / `done` 已完成。不返回 `contact` 与内部 `id`。  
+**错误**：`400` 格式非 `FB-` + 8 位数字 / `404` 不存在 / `429` 限流（独立失败桶）。
+
+---
+
 ## 3. 管理接口（需 `x-admin-key`）
 
 所有管理接口需请求头：
@@ -471,6 +525,41 @@ Logo 约束：PNG / JPG / WebP / SVG / GIF / ICO，≤2MB。
 
 **响应 200**：`{ "ok": true, "settings": { ... } }`  
 **错误**：`400` 非图片 / `413` 超限。
+
+---
+
+### 3.8 反馈管理
+
+```
+GET    /api/admin/feedback        # 列表
+PUT    /api/admin/feedback/:id    # 更新状态
+DELETE /api/admin/feedback/:id    # 删除反馈
+```
+
+反馈对象结构：
+
+```json
+{
+  "id": "1760000000000-a1b2c3d4",
+  "code": "FB-24815302",
+  "type": "bug",
+  "contact": "test@qq.com",
+  "content": "下载偶发失败",
+  "status": "pending",
+  "createdAt": 1760000000000,
+  "updatedAt": 1760000000000
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `code` | 反馈号（`FB-` + 8 位数字，公开查询凭据） |
+| `type` | `bug` / `feature` / `other` |
+| `status` | `pending` 等待中 / `processing` 处理中 / `done` 已完成 |
+
+**列表响应 200**：`{ "list": [ ... ] }`（`createdAt` 倒序）  
+**更新响应 200**：`{ "ok": true, "feedback": { ... } }`；非法状态 `400`；不存在 `404`。  
+**删除响应 200**：`{ "ok": true }`（物理删除）。
 
 ---
 

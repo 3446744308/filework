@@ -7,6 +7,7 @@ import {
   InfoCircleOutlined,
   MessageOutlined,
   MoreOutlined,
+  SearchOutlined,
   SendOutlined
 } from '@ant-design/icons'
 import Upload from './pages/Upload.jsx'
@@ -14,8 +15,10 @@ import Retrieve from './pages/Retrieve.jsx'
 import Admin from './pages/Admin.jsx'
 import AdminFiles from './pages/AdminFiles.jsx'
 import AdminSettings from './pages/AdminSettings.jsx'
+import AdminFeedback from './pages/AdminFeedback.jsx'
 import About from './pages/About.jsx'
 import Feedback from './pages/Feedback.jsx'
+import FeedbackQuery from './pages/FeedbackQuery.jsx'
 import NoticeBar from './components/NoticeBar.jsx'
 import { useSettings, logoUrlOf } from './hooks/useSettings.js'
 
@@ -63,6 +66,15 @@ const items = [
           <Link to="/feedback" className="menu-item-label">
             <MessageOutlined />
             反馈
+          </Link>
+        )
+      },
+      {
+        key: '/feedback-query',
+        label: (
+          <Link to="/feedback-query" className="menu-item-label">
+            <SearchOutlined />
+            查询反馈
           </Link>
         )
       }
@@ -123,9 +135,11 @@ export default function App() {
         <Route path="/d/:code" element={<Retrieve />} />
         <Route path="/about" element={<About />} />
         <Route path="/feedback" element={<Feedback />} />
+        <Route path="/feedback-query" element={<FeedbackQuery />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/files" element={<AdminFiles />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
+        <Route path="/admin/feedback" element={<AdminFeedback />} />
         <Route
           path="*"
           element={

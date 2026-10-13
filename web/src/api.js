@@ -116,6 +116,32 @@ export const api = {
       body: JSON.stringify(data)
     })
   },
+  feedback(data) {
+    return request('/api/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+  },
+  feedbackQuery(code) {
+    return request(`/api/feedback/query?code=${encodeURIComponent(code)}`)
+  },
+  async adminFeedbackList(key) {
+    return request('/api/admin/feedback', { headers: { 'x-admin-key': key } })
+  },
+  async adminFeedbackStatus(id, status, key) {
+    return request(`/api/admin/feedback/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-admin-key': key },
+      body: JSON.stringify({ status })
+    })
+  },
+  async adminFeedbackDelete(id, key) {
+    return request(`/api/admin/feedback/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-key': key }
+    })
+  },
   async adminPing(key) {
     return request('/api/admin/ping', { headers: { 'x-admin-key': key } })
   },

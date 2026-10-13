@@ -39,7 +39,7 @@
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
                 "example": {
                   "ok": true,
-                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan"]
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan", "feedback"]
                 }
               }
             }
@@ -240,6 +240,70 @@
             }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "tags": ["公开"],
+        "summary": "提交意见反馈",
+        "operationId": "createFeedback",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FeedbackUpdate" },
+              "example": { "type": "bug", "contact": "test@qq.com", "content": "下载偶发失败" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "提交成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "id": { "type": "string" },
+                    "code": { "type": "string", "description": "反馈号，FB- + 8 位数字" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "429": { "description": "限流" }
+        }
+      }
+    },
+    "/api/feedback/query": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "查询反馈进度",
+        "description": "凭反馈号（FB- + 8 位数字，大小写不敏感）查询处理状态；不返回 contact 与内部 id。",
+        "operationId": "queryFeedback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^FB-\\d{8}$" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeedbackPublic" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "description": "限流" }
         }
       }
     },
@@ -543,6 +607,91 @@
           "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
+    },
+    "/api/admin/feedback": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "反馈列表",
+        "operationId": "adminFeedbackList",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "list": { "type": "array", "items": { "$ref": "#/components/schemas/Feedback" } }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/feedback/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "put": {
+        "tags": ["管理"],
+        "summary": "更新反馈状态",
+        "operationId": "adminFeedbackStatus",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": { "type": "string", "enum": ["pending", "processing", "done"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "feedback": { "$ref": "#/components/schemas/Feedback" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["管理"],
+        "summary": "删除反馈",
+        "operationId": "adminFeedbackDelete",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
     }
   },
   "components": {
@@ -702,6 +851,39 @@
         "properties": {
           "ok": { "type": "boolean" },
           "notice": { "$ref": "#/components/schemas/Notice" }
+        }
+      },
+      "Feedback": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "code": { "type": "string", "description": "反馈号，FB- + 8 位数字" },
+          "type": { "type": "string", "enum": ["bug", "feature", "other"] },
+          "contact": { "type": "string", "maxLength": 100 },
+          "content": { "type": "string", "maxLength": 2000 },
+          "status": { "type": "string", "enum": ["pending", "processing", "done"], "description": "等待中 / 处理中 / 已完成" },
+          "createdAt": { "type": "integer", "format": "int64" },
+          "updatedAt": { "type": "integer", "format": "int64" }
+        }
+      },
+      "FeedbackPublic": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "type": { "type": "string", "enum": ["bug", "feature", "other"] },
+          "content": { "type": "string", "maxLength": 2000 },
+          "status": { "type": "string", "enum": ["pending", "processing", "done"] },
+          "createdAt": { "type": "integer", "format": "int64" },
+          "updatedAt": { "type": "integer", "format": "int64" }
+        }
+      },
+      "FeedbackUpdate": {
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "type": { "type": "string", "enum": ["bug", "feature", "other"] },
+          "contact": { "type": "string", "maxLength": 100 },
+          "content": { "type": "string", "maxLength": 2000 }
         }
       },
       "AdminStats": {

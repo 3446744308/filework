@@ -26,9 +26,9 @@ function sweep() {
 const sweeper = setInterval(sweep, 60_000)
 sweeper.unref()
 
-export function missGuard(limit, windowMs = 60_000) {
+export function missGuard(limit, windowMs = 60_000, scope = '') {
   return (req, res, next) => {
-    const key = `miss:${req.ip}`
+    const key = `miss:${scope}:${req.ip}`
     const r = hit(key, limit, windowMs)
     if (r.blocked) {
       return res.status(429).json({ error: '尝试过于频繁，请 1 分钟后再试' })

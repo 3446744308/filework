@@ -140,6 +140,28 @@ body {
   color: #8c8c8c;
 }
 
+.feedback-query-result {
+  margin-top: 28px;
+}
+
+.feedback-query-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin-bottom: 24px;
+}
+
+.feedback-query-content {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
 .site-footer {
   margin-top: auto;
   padding: 16px 24px;

@@ -17,6 +17,14 @@ import {
 } from './store.js'
 import { startCleanup } from './cleanup.js'
 import { missGuard, rateGuard } from './rate-limit.js'
+import {
+  createFeedback,
+  listFeedback,
+  updateFeedbackStatus,
+  removeFeedback,
+  findFeedbackByCode,
+  FEEDBACK_STATUSES
+} from './feedback.js'
 import { getNotice, saveNotice } from './notice.js'
 import { readCounters } from './stats.js'
 import {
@@ -89,7 +97,8 @@ app.get('/api/health', (req, res) =>
       'customCode',
       'password',
       'beian',
-      'gongan'
+      'gongan',
+      'feedback'
     ]
   })
 )
@@ -122,6 +131,53 @@ app.get('/api/notice', (req, res) => res.json(getNotice()))
 
 app.put('/api/notice', adminAuth, (req, res) => {
   res.json({ ok: true, notice: saveNotice(req.body || {}) })
+})
+
+app.post('/api/feedback', rateGuard(config.uploadLimitPerMinute), (req, res) => {
+  try {
+    const item = createFeedback(req.body || {})
+    res.status(201).json({ ok: true, id: item.id, code: item.code })
+  } catch (e) {
+    if (e.code === 'INVALID') return fail(res, 400, e.message)
+    fail(res, 500, '提交失败：' + e.message)
+  }
+})
+
+app.get('/api/feedback/query', missGuard(config.rateLimitMisses, 60_000, 'fbquery'), (req, res) => {
+  const code = String(req.query.code ?? '').trim().toUpperCase()
+  if (!/^FB-\d{8}$/.test(code)) return fail(res, 400, '反馈号格式不正确')
+  const item = findFeedbackByCode(code)
+  if (!item) return fail(res, 404, '反馈号不存在')
+  res.json({
+    code: item.code,
+    type: item.type,
+    content: item.content,
+    status: item.status,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt
+  })
+})
+
+app.get('/api/admin/feedback', adminAuth, (req, res) => {
+  res.json({ list: listFeedback() })
+})
+
+app.put('/api/admin/feedback/:id', adminAuth, (req, res) => {
+  const id = String(req.params.id ?? '')
+  if (!id || id.includes('/') || id.includes('\\')) return fail(res, 400, '反馈 ID 不正确')
+  if (!FEEDBACK_STATUSES.includes(req.body?.status)) {
+    return fail(res, 400, '状态不正确')
+  }
+  const item = updateFeedbackStatus(id, req.body.status)
+  if (!item) return fail(res, 404, '反馈不存在')
+  res.json({ ok: true, feedback: item })
+})
+
+app.delete('/api/admin/feedback/:id', adminAuth, (req, res) => {
+  const id = String(req.params.id ?? '')
+  if (!id || id.includes('/') || id.includes('\\')) return fail(res, 400, '反馈 ID 不正确')
+  removeFeedback(id)
+  res.json({ ok: true })
 })
 
 function publicSettings(data) {
