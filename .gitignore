@@ -2,5 +2,6 @@ node_modules/
 web/dist/
 data/
 data-test/
+docs/DEVELOPMENT.md
 .env
 *.log
