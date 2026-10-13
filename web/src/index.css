@@ -144,6 +144,10 @@ body {
   margin-top: 28px;
 }
 
+.feedback-query-result .ant-steps-item-content {
+  max-width: 520px;
+}
+
 .feedback-query-head {
   display: flex;
   flex-wrap: wrap;

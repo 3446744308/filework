@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { App as AntApp, Button, Card, Divider, Input, Space, Steps, Tag, Typography } from 'antd'
-import { CheckCircleOutlined, ClockCircleOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons'
+import { App as AntApp, Button, Card, Input, Space, Steps, Tag, Typography } from 'antd'
+import { SearchOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { formatTime } from '../utils.js'
@@ -98,42 +98,39 @@ export default function FeedbackQuery() {
             </div>
 
             <Steps
+              direction="vertical"
               current={step}
               status={result.status === 'done' ? 'finish' : 'process'}
               size="small"
-              responsive
               items={[
                 {
                   title: '等待中',
-                  description: result.status === 'pending' ? '排队等待处理' : '已受理',
-                  icon:
-                    result.status === 'pending' ? <ClockCircleOutlined /> : <CheckCircleOutlined />
+                  description: (
+                    <>
+                      <Text type="secondary" style={{ fontSize: 13 }}>
+                        {result.status === 'pending' ? '排队等待处理' : '已受理'}
+                      </Text>
+                      <div className="feedback-query-content">
+                        <Text type="secondary" style={{ fontSize: 13 }}>反馈内容</Text>
+                        <Paragraph
+                          style={{ whiteSpace: 'pre-wrap', marginTop: 8, marginBottom: 0, maxHeight: 360, overflow: 'auto' }}
+                        >
+                          {result.content}
+                        </Paragraph>
+                      </div>
+                    </>
+                  )
                 },
                 {
                   title: '处理中',
-                  description: result.status === 'processing' ? '正在跟进处理' : result.status === 'done' ? '已处理' : '待处理',
-                  icon: result.status === 'processing'
-                    ? <TeamOutlined />
-                    : result.status === 'done'
-                      ? <CheckCircleOutlined />
-                      : undefined
+                  description: result.status === 'processing' ? '正在跟进处理' : result.status === 'done' ? '已处理' : '待处理'
                 },
                 {
                   title: '已完成',
-                  description: result.status === 'done' ? '感谢你的反馈' : '处理完成后更新',
-                  icon: result.status === 'done' ? <CheckCircleOutlined /> : undefined
+                  description: result.status === 'done' ? '感谢你的反馈' : '处理完成后更新'
                 }
               ]}
             />
-
-            <Divider style={{ margin: '20px 0 16px' }} />
-
-            <div className="feedback-query-content">
-              <Text type="secondary">反馈内容</Text>
-              <Paragraph style={{ whiteSpace: 'pre-wrap', marginTop: 8, marginBottom: 0, maxHeight: 360, overflow: 'auto' }}>
-                {result.content}
-              </Paragraph>
-            </div>
           </div>
         )}
       </Card>
