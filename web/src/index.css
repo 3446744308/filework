@@ -138,6 +138,18 @@ body {
   word-break: break-all;
 }
 
+.site-footer-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.site-footer-icon {
+  height: 16px;
+  max-width: 16px;
+  object-fit: contain;
+}
+
 .upload-progress {
   margin-top: 20px;
 }
