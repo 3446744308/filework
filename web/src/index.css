@@ -282,6 +282,17 @@ body {
   white-space: nowrap;
 }
 
+.download-progress {
+  width: 100%;
+  max-width: 420px;
+  margin: 14px auto 0;
+  text-align: center;
+}
+
+.download-progress .ant-progress {
+  margin-bottom: 4px;
+}
+
 .selected-file {
   margin-top: 16px;
   max-width: 100%;
@@ -435,6 +446,31 @@ body {
   padding: 8px 12px !important;
 }
 
+.notice-preset-row {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #fafafa;
+  width: 100%;
+}
+
+.notice-preset-group-title {
+  display: inline-block;
+  margin-top: 6px;
+  padding-left: 2px;
+  color: #595959;
+  font-size: 13px;
+}
+
+.notice-preview-wrap {
+  width: 100%;
+}
+
+.notice-preview-bar {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 .notice-content {
   white-space: pre-wrap;
   word-break: break-word;
@@ -443,6 +479,8 @@ body {
   color: #333;
   max-height: 50vh;
   overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
 }
 
 .notice-bar-alert .ant-alert-message {
@@ -481,20 +519,36 @@ body {
   white-space: nowrap;
 }
 
-@keyframes notice-bar-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
+.notice-bar-viewport-vertical {
+  max-height: 24px;
+}
+
+.notice-bar-item-block {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notice-bar-marquee-up .notice-bar-content,
+.notice-bar-marquee-bounce .notice-bar-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notice-bar-marquee-up,
+.notice-bar-marquee-bounce {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .notice-bar-marquee.scrolling {
   max-width: none;
   width: max-content;
-  animation: notice-bar-marquee linear infinite;
   animation-duration: var(--notice-duration, 12s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
 .notice-bar-marquee.scrolling:hover {
@@ -506,6 +560,98 @@ body {
   margin-right: 64px;
   overflow: visible;
   text-overflow: clip;
+}
+
+.notice-bar-marquee-left.scrolling {
+  animation-name: notice-bar-marquee-left;
+}
+
+.notice-bar-marquee-right.scrolling {
+  animation-name: notice-bar-marquee-right;
+}
+
+.notice-bar-marquee-up.scrolling {
+  animation-name: notice-bar-marquee-up;
+}
+
+.notice-bar-marquee-bounce.scrolling {
+  animation-name: notice-bar-marquee-bounce;
+  animation-timing-function: ease-in-out;
+  animation-direction: alternate;
+}
+
+.notice-bar-marquee-up.scrolling,
+.notice-bar-marquee-bounce.scrolling {
+  width: 100%;
+  max-width: 100%;
+}
+
+.notice-bar-marquee-up.scrolling .notice-bar-item,
+.notice-bar-marquee-bounce.scrolling .notice-bar-item {
+  margin-right: 0;
+  margin-bottom: 8px;
+}
+
+@keyframes notice-bar-marquee-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes notice-bar-marquee-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes notice-bar-marquee-up {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes notice-bar-marquee-bounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-1 * var(--notice-shift, 0px)));
+  }
+}
+
+/* 无障碍兜底：系统开启「减少动态效果」时，即使已进入滚动状态也不播放动画（组件层同时会降级为静态）。 */
+@media (prefers-reduced-motion: reduce) {
+  .notice-bar-marquee.scrolling,
+  .notice-bar-marquee.scrolling:hover {
+    animation: none;
+    max-width: 100%;
+    width: auto;
+  }
+
+  .notice-bar-marquee.scrolling .notice-bar-item {
+    max-width: 100%;
+    margin-right: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.notice-bar-alert-fixed-top,
+.notice-bar-alert-fixed-bottom {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.notice-bar-alert-preview {
+  position: static !important;
 }
 
 .admin-toolbar {
@@ -828,11 +974,17 @@ body {
 
 .retrieve-form {
   max-width: 352px;
-  margin: 0 auto;
+  margin: 24px auto 0;
+}
+
+.retrieve-form-actions {
+  margin-top: 16px;
 }
 
 .retrieve-form .retrieve-tip {
+  display: block;
   margin-top: 12px;
+  text-align: center;
 }
 
 .retrieve-form .ant-otp {
@@ -969,7 +1121,7 @@ body {
 
 .waybill-print {
   width: 100%;
-  max-width: 100%;
+  max-width: 920px;
   margin: 0 auto;
   text-align: left;
 }

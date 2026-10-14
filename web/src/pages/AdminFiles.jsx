@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { App as AntApp, Button, Card, Input, Popconfirm, Progress, Space, Table, Typography } from 'antd'
+import {
+  App as AntApp,
+  Button,
+  Card,
+  Input,
+  Popconfirm,
+  Progress,
+  Space,
+  Table,
+  Tag,
+  Typography
+} from 'antd'
 import {
   CopyOutlined,
   DeleteOutlined,
@@ -112,10 +123,14 @@ export default function AdminFiles() {
       title: '文件名',
       dataIndex: 'filename',
       ellipsis: true,
-      render: (name) => (
-        <Typography.Text style={{ maxWidth: 220 }} ellipsis={{ tooltip: name }}>
-          {name}
-        </Typography.Text>
+      render: (name, row) => (
+        <Space size={4}>
+          <Typography.Text style={{ maxWidth: 220 }} ellipsis={{ tooltip: name }}>
+            {name}
+          </Typography.Text>
+          {row.compressionState === 'pending' && <Tag color="processing">压缩中</Tag>}
+          {row.crossHashed && <Tag color="blue">跨文件去重</Tag>}
+        </Space>
       )
     },
     {
@@ -136,6 +151,24 @@ export default function AdminFiles() {
       dataIndex: 'size',
       width: 100,
       render: (size) => formatBytes(size)
+    },
+    {
+      title: '传输节省',
+      key: 'transfer',
+      width: 150,
+      responsive: ['xl'],
+      render: (_, row) => {
+        const transfer = row.transfer || {}
+        if (!transfer.originalBytes) return <Typography.Text type="secondary">—</Typography.Text>
+        return (
+          <div>
+            <div>{formatBytes(transfer.savedBytes || 0)}</div>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              线上 {formatBytes(transfer.wireBytes || 0)} / {formatBytes(transfer.originalBytes)}
+            </Typography.Text>
+          </div>
+        )
+      }
     },
     {
       title: '下载进度',

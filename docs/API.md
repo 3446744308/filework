@@ -59,12 +59,20 @@ GET /api/health
   "features": [
     "siteSettings", "maxFileSize", "blockedExts",
     "noticeDisplay", "displayMode", "waybill",
-    "publicIp", "customCode", "password", "beian", "gongan", "feedback"
-  ]
+    "publicIp", "customCode", "password",
+    "compression", "chunkedUpload", "parallelDownload", "downloadSession",
+    "transferCompression", "adaptiveChunking", "unitDedup", "multiCodec",
+    "transferStats", "codecToggle", "transferExport", "uploadResume",
+    "downloadResume", "sessionQuota", "multiNotice", "compressQueue",
+    "crossFileDedup", "beian", "gongan", "feedback"
+  ],
+  "notice": { "total": 1, "active": 1, "winnerId": "default", "nextChangeAt": null },
+  "compressQueue": { "pending": 0, "running": 0, "done": 3, "failed": 0 },
+  "dedup": { "enabled": false, "objects": 0, "bytes": 0, "lastGcRemoved": 0, "lastGcAt": 0 }
 }
 ```
 
-`features` 为功能标记数组，App 可据此判断服务器是否支持某能力（如 `"password"` 表示支持取件密码）。
+`features` 为功能标记数组，App 可据此判断服务器是否支持某能力（如 `"password"` 表示支持取件密码、`"chunkedUpload"` 表示支持分片上传、`"uploadResume"` 表示支持断点续传）。除 `ok` / `features` 外还会附带 `notice`（公告槽位统计）、`compressQueue`（压缩后台队列）与 `dedup`（跨文件去重开关与对象统计）三段运行时快照。
 
 ---
 
@@ -87,6 +95,11 @@ GET /api/settings
   "blockedExts": ["exe", "php"],
   "displayMode": "simple",
   "customCodeEnabled": true,
+  "compressionEnabled": true,
+  "compressionCodecs": "br,gzip",
+  "compressionCodecCap": "br,gzip",
+  "presetLimit": 10,
+  "presetLimitCap": 50,
   "updatedAt": 1760000000000
 }
 ```
@@ -102,6 +115,11 @@ GET /api/settings
 | `blockedExts` | string[] | 禁止上传的后缀（无点、小写） |
 | `displayMode` | string | `simple` 简约 / `waybill` 面单 |
 | `customCodeEnabled` | boolean | 是否允许自定义取件码 |
+| `compressionEnabled` | boolean | 是否开启存储压缩（可压缩类型自动写入自适应单元容器） |
+| `compressionCodecs` | string | 生效的压缩编码候选，`br,gzip` 双试 / 仅 `gzip` |
+| `compressionCodecCap` | string | 环境变量 `COMPRESS_CODECS` 给的硬上限，为 `gzip` 时前端不允许切双试 |
+| `presetLimit` | number | 公告预设上限（生效值） |
+| `presetLimitCap` | number | 公告预设上限的环境硬上限（`MAX_NOTICE_PRESETS`） |
 
 App 建议：上传前用 `maxFileSize` 做本地预检，用 `blockedExts` 拦截明显不合法类型。
 
@@ -128,11 +146,27 @@ GET /api/notice
 
 ```json
 {
+  "id": "default",
   "enabled": true,
   "title": "维护通知",
   "content": "本周日凌晨 2 点服务维护……",
   "display": "modal",
-  "updatedAt": 1760000000000
+  "position": "top",
+  "scroll": "none",
+  "priority": 0,
+  "startAt": null,
+  "endAt": null,
+  "bgColor": "",
+  "textColor": "",
+  "fontSize": 0,
+  "radius": 0,
+  "opacity": 0,
+  "maxLines": 1,
+  "rev": 3,
+  "updatedAt": 1760000000000,
+  "notices": [
+    { "id": "default", "enabled": true, "title": "维护通知", "content": "本周日凌晨 2 点服务维护……", "priority": 0 }
+  ]
 }
 ```
 
@@ -140,9 +174,19 @@ GET /api/notice
 |---|---|
 | `enabled` | 是否启用；App 仅在 `true` 时展示 |
 | `title` | 标题，可为空（建议 fallback「公告」） |
-| `content` | 正文 |
+| `content` | 正文（≤2000 字） |
 | `display` | `modal` 弹窗 / `bar` 顶部条 / `both` 两者 |
-| `updatedAt` | 更新时间，可用于本地缓存去重 |
+| `position` | 普通条位置：`top` / `bottom`（前端按槽位渲染） |
+| `scroll` | 滚动方式：`none` / `left` / `right` / `up` / `bounce` |
+| `bgColor` / `textColor` | 自定义配色，空串表示跟随主题 |
+| `fontSize` / `radius` / `opacity` | 字号 / 圆角 / 不透明度，`0` 表示跟随默认 |
+| `maxLines` | 普通条纵向行数上限：`1` / `2` / `3` |
+| `priority` | 仲裁优先级 `0~100`（≥100 抢占弹窗位） |
+| `startAt` / `endAt` | 投放时间窗（毫秒时间戳，`null` 表示不限）；请求时求值，到点自动生效/下线 |
+| `rev` | 公告存储版本号，写接口的回写校验基准（冲突返回 409） |
+| `notices` | 当前生效的全部公告，已按仲裁序（优先级→时间窗→更新时间）排好 |
+
+> **顶层字段 = 仲裁胜者**。单公告时代的 App 只读顶层字段即可继续工作；多公告能力见 [§9.5](#95-多公告与预设管理) 。
 
 ---
 
@@ -182,6 +226,7 @@ Content-Type: multipart/form-data
   "code": "832451",
   "filename": "报告.pdf",
   "size": 1048576,
+  "storedSize": 327680,
   "mime": "application/pdf",
   "note": "选填备注",
   "hasPassword": true,
@@ -189,6 +234,8 @@ Content-Type: multipart/form-data
   "expiresAt": 1760086400000,
   "maxDownloads": 5,
   "downloads": 0,
+  "compressionState": "pending",
+  "compressed": false,
   "clientIp": "1.2.3.4"
 }
 ```
@@ -197,8 +244,13 @@ Content-Type: multipart/form-data
 |---|---|
 | `code` | 6 位取件码，App 应引导用户分享此码或 `/d/<code>` 链接 |
 | `hasPassword` | 是否设有取件密码（布尔，不含密码本身） |
+| `storedSize` | 当前落盘字节数；压缩为后台任务，可能随后变小 |
+| `compressionState` | `pending`（压缩排队中）/ 空串（无需压缩或已完成） |
+| `compressed` | 是否已压入自适应单元容器；`pending` 时先用 `/api/upload/job` 轮询到 `finished` 再取最终值 |
 | `clientIp` | 仅上传响应回传，`/api/info` 不返回；可选展示 |
 | `createdAt` / `expiresAt` | Unix 毫秒时间戳 |
+
+> 大文件建议改走分片上传与断点续传（`/api/upload/init` → `/api/upload/part` → `/api/upload/complete`），详见 [§9.1](#91-分片上传与断点续传) 。
 
 **错误**
 
@@ -579,8 +631,10 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 
 | 维度 | 默认阈值 | 触发后 |
 |---|---|---|
-| 取件相关失败（`/api/info`、`/api/verify-password`、`/api/download` 的 4xx） | 每 IP 每分钟 `RATE_LIMIT_MISSES` 次（默认 10） | 返回 429，窗口 60s |
-| 上传频率（`/api/upload`） | 每 IP 每分钟 `UPLOAD_LIMIT_PER_MINUTE` 次（默认 10） | 返回 429 |
+| 取件相关失败（`/api/info`、`/api/verify-password`、`/api/download`、`/api/download/session` 的 4xx） | 每 IP 每分钟 `RATE_LIMIT_MISSES` 次（默认 10） | 返回 429，窗口 60s |
+| 反馈号查询失败（`/api/feedback/query` 的 4xx） | 同上，但**独立分桶**，不挤占取件码失败次数 | 返回 429，窗口 60s |
+| 上传频率（`/api/upload`、`/api/feedback`、`/api/upload/init`） | 每 IP 每分钟 `UPLOAD_LIMIT_PER_MINUTE` 次（默认 10） | 返回 429 |
+| 在途会话配额 | 上传 `MAX_UPLOAD_SESSIONS_PER_IP`（默认 8）/ 下载 `MAX_DOWNLOAD_SESSIONS_PER_IP`（默认 32）/ 待处理上传总大小 `MAX_TMP_BYTES_PER_IP`（默认 512MB） | 返回 429（带 `uploadId` 的续传不占新名额） |
 
 **成功请求会重置该 IP 的失败计数**。App 收到 429 时应提示用户稍后再试，而非无限重试。
 
@@ -629,19 +683,49 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 | POST | `/api/settings/logo` | admin | 上传 Logo |
 | DELETE | `/api/settings/logo` | admin | 删除 Logo |
 | GET | `/api/logo` | 公开 | 读取 Logo 图片 |
-| GET | `/api/notice` | 公开 | 读取公告 |
-| PUT | `/api/notice` | admin | 保存公告 |
+| GET | `/api/notice` | 公开 | 读取公告（顶层=仲裁胜者，另带 `notices[]`） |
+| PUT | `/api/notice` | admin | 保存公告（单条兼容写，带 `rev` 乐观锁） |
 | GET | `/api/ip` | 公开 | 获取公网 IP |
-| POST | `/api/upload` | 公开* | 上传文件 |
+| POST | `/api/upload` | 公开* | 上传文件（单请求） |
 | GET | `/api/info` | 公开 | 查询分享信息 |
 | POST | `/api/verify-password` | 公开 | 验证取件密码 |
-| GET | `/api/download` | 公开 | 下载文件（消耗次数） |
+| GET | `/api/download` | 公开 | 下载文件（整文件流，消耗次数） |
+| POST | `/api/feedback` | 公开* | 提交意见反馈，返回反馈号 |
+| GET | `/api/feedback/query` | 公开 | 凭反馈号查询处理进度与回复 |
+| GET | `/api/upload/status` | 公开 | 查询分片上传会话进度 |
+| POST | `/api/upload/init` | 公开* | 创建 / 恢复分片上传会话 |
+| PUT | `/api/upload/part` | 公开 | 上传单个分片（原始字节体） |
+| POST | `/api/upload/complete` | 公开 | 合并分片并落位（消耗次数前） |
+| GET | `/api/upload/job` | 公开 | 压缩任务进度（按 uploadId 或取件码） |
+| POST | `/api/download/session` | 公开 | 创建分片下载会话（消耗 1 次） |
+| GET | `/api/download/status` | 公开 | 查询下载会话与分片计划 |
+| GET | `/api/download/part` | 公开 | 取一个分片（按 index 或 start/end） |
+| POST | `/api/download/end` | 公开 | 结束下载会话并释放引用 |
 | GET | `/api/admin/ping` | admin | 验证管理密钥 |
-| GET | `/api/admin/stats` | admin | 统计概览 |
-| GET | `/api/admin/list` | admin | 有效分享列表 |
+| GET | `/api/admin/stats` | admin | 统计概览（传输/去重/会话配额） |
+| GET | `/api/admin/stats/export` | admin | 导出传输维度明细 CSV |
+| POST | `/api/admin/stats/reset` | admin | 清零传输统计（需 `confirm: true`） |
+| GET | `/api/admin/list` | admin | 有效分享列表（含传输与存储态） |
 | DELETE | `/api/admin/:code` | admin | 删除指定分享 |
+| GET | `/api/admin/notices` | admin | 公告快照（`rev` / `limit` / `notices[]`） |
+| POST | `/api/admin/notices` | admin | 新建公告 |
+| PUT | `/api/admin/notices/{id}` | admin | 更新公告（时间窗 / 优先级 / 样式） |
+| DELETE | `/api/admin/notices/{id}` | admin | 删除公告 |
+| GET | `/api/admin/notice/presets` | admin | 预设列表（含上限与审计字段） |
+| POST | `/api/admin/notice/presets` | admin | 新建预设 |
+| PUT | `/api/admin/notice/presets/{id}` | admin | 更新预设 |
+| DELETE | `/api/admin/notice/presets/{id}` | admin | 删除预设 |
+| POST | `/api/admin/notice/presets/{id}/apply` | admin | 套用预设到某条公告 |
+| PUT | `/api/admin/notice/presets/order` | admin | 预设排序 |
+| GET | `/api/admin/notice/presets/export` | admin | 导出预设 JSON |
+| POST | `/api/admin/notice/presets/import` | admin | 导入预设 JSON |
+| GET | `/api/admin/feedback` | admin | 反馈列表 |
+| PUT | `/api/admin/feedback/{id}` | admin | 改状态 / 回复（置 `done` 必须带 `reply`） |
+| DELETE | `/api/admin/feedback/{id}` | admin | 删除反馈 |
+| GET | `/api/admin/feedback/templates` | admin | 读取回复模板 |
+| PUT | `/api/admin/feedback/templates` | admin | 保存回复模板（≤20 条） |
 
-\* 上传接口受每 IP 每分钟频率限制，但无需管理密钥。
+\* 上传 / 反馈接口受每 IP 每分钟频率限制，但无需管理密钥；`/api/upload/init` 仅在**新建**会话时计数（带 `uploadId` 的续传不计）。
 
 ---
 
@@ -685,4 +769,122 @@ curl -X DELETE -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/832451
 3. **下载消耗次数**：每次成功返回 200 文件流即消耗 1 次；App 应在下载**成功后**再更新 UI 的剩余次数，失败（网络中断等）不消耗。
 4. **失效即时销毁**：过期或次数耗尽后，服务端会物理删除文件与元数据，之后所有请求均 404，无法找回。
 5. **自定义码冲突**：收到 409 时，App 可提示用户换码，或不传 `customCode` 让系统随机生成。
+6. **反馈号即凭证**：反馈号为 `FB-` + 8 位数字，`/api/feedback/query` 只凭号返回处理进度，App 应提示用户妥善保存；反馈号查询与取件码失败限流分桶，互不影响。
+
+---
+
+## 9. 传输优化与运维扩展接口
+
+> 本章接口与第 2 章的「整文件上传 / 整文件下载」可同时使用：小文件走简单路径，大文件（或需要断点续传、进度与省流量）时按本章实现。字段口径与仓库内 `docs/DEVELOPMENT.md`、`docs/rfc/*` 保持一致。
+
+### 9.1 分片上传与断点续传
+
+```
+POST /api/upload/init     # 创建或恢复会话
+PUT  /api/upload/part     # 上传一个分片（原始字节，非 multipart）
+POST /api/upload/complete # 合并并落位
+GET  /api/upload/status   # 查询会话已收分片（重传前先查）
+```
+
+**创建会话（`POST /api/upload/init`）**
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `filename` | 是 | 文件名（≤255 字符），用于后缀黑名单校验 |
+| `size` | 是 | 字节数，超过 `maxFileSize` 返回 413 |
+| `mime` | 否 | MIME，默认 `application/octet-stream` |
+| `uploadId` | 否 | 带此字段即**续传**：文件一致时返回原会话与已收分片，不占用新配额 |
+| `expiresIn` / `maxDownloads` / `note` / `customCode` / `password` | 否 | 与 [§2.6](#26-上传文件) 同义 |
+
+```json
+{ "uploadId": "8f0c...", "partSize": 4194304, "totalParts": 12, "resumed": false, "received": [] }
+```
+
+`partSize` 默认取 `TRANSFER_PART_SIZE`（4MB）；仅当按该尺寸会超出分片数上限时自动向上翻倍，此时以响应回传的 `partSize` 为准。
+
+**上传分片（`PUT /api/upload/part?uploadId=...&index=...`）**：请求体为该分片的原始字节（`Content-Type` 任意），长度必须精确等于该分片应有长度（末片为余数），否则 400。响应 `{ "ok": true, "received": 3 }`。分片可并发、可乱序、可重传。
+
+**完成（`POST /api/upload/complete`）**：JSON body `{ "uploadId": "..." }`；分片不全返回 400。响应与 [§2.6](#26-上传文件) 的 201 一致（含 `compressionState` / `storedSize` / `compressed` / `clientIp`）。
+
+**错误**：400 参数/分片不合法、404 会话不存在或过期、409 自定义码冲突、413 超限、429 频率或会话配额超限。
+
+### 9.2 压缩任务进度
+
+```
+GET /api/upload/job?code=832451        # 或 ?uploadId=...
+```
+
+```json
+{ "status": "done", "error": "", "compressed": true, "storedSize": 327680, "compressionState": "done", "finished": true }
+```
+
+压缩在上传成功后异步执行（串行队列）。`finished: true` 后 `compressed` / `storedSize` 才是最终值；App 若展示「已省 xx%」建议轮询到 `finished` 再展示。
+
+### 9.3 分片下载（并行 + 省流量）
+
+```
+POST /api/download/session  # 创建会话（此步消耗 1 次下载次数）
+GET  /api/download/status   # 断点续传前查询计划
+GET  /api/download/part     # 取分片
+POST /api/download/end      # 结束会话
+```
+
+**创建会话**：JSON body `{ "code": "832451", "password": "..." }`（设密时必填）。
+
+```json
+{
+  "token": "3b1f...",
+  "partSize": 4194304,
+  "filename": "报告.pdf",
+  "size": 10485760,
+  "mime": "application/pdf",
+  "expiresAt": 1760001200000,
+  "compressed": true,
+  "units": [[0, 4194304], [4194304, 8388608], [8388608, 10485760]],
+  "unitCount": 3,
+  "parallel": 3
+}
+```
+
+`units` 是服务端给出的**自适应分片计划**，`parallel` 为建议并发（2~8）。
+
+**取分片（`GET /api/download/part?token=...&index=N`）**：返回该分片的**原始字节**（即浏览器/客户端拼接后就是完整文件）。若客户端在 `Accept-Encoding` 里声明支持 `br` / `gzip`，服务端可能直接下发存储态编码并置 `Content-Encoding`，由 HTTP 层自动解压——因此**不要**对响应体再做一次解压。相关头部：
+
+| 响应头 | 说明 |
+|---|---|
+| `X-Transfer-Part` | 分片序号（按 `index` 取时回传） |
+| `X-Transfer-Mode` | `store` 存储态直发 / `recompress` 重新编码 / `raw` 未压缩 |
+| `X-Transfer-Codec` | 本次实际使用的编码（`br` / `gzip` / `raw`） |
+| `Content-Encoding` | 仅在直发或重编码时出现，客户端库通常已自动解压 |
+
+也支持 `?token=...&start=0&end=1048575` 的字节范围取法（单次跨度不得超过 `partSize`）。
+
+**结束会话**：JSON body `{ "token": "..." }`，响应 `{ "ok": true }`。会话过期或被回收后重新 `POST /api/download/session` 即可（会**再消耗 1 次**下载次数，务必复用同一 token 直至下载完成）。
+
+### 9.4 统计与运维（管理端）
+
+```
+GET  /api/admin/stats          # 概览：文件数 / 实际占用 / 传输节省 / 近 7 日 / 会话配额 / 跨文件去重
+GET  /api/admin/stats/export   # 传输维度明细导出 CSV（UTF-8 BOM，文件名带时间戳）
+POST /api/admin/stats/reset    # 清零传输统计：body 必须为 { "confirm": true }
+```
+
+`/api/admin/stats` 在基础字段外还返回：`totalStoredSize`、`savedBytes`、`transferOriginalBytes`、`transferWireBytes`、`transferSavedBytes`、`transferToday`、`transferDays`（近 7 日）、`transferResetAt`、`transferResetCount`、`sessionQuota.topIps`，以及 `dedupCross*`（`CROSS_FILE_DEDUP=on` 时的去重收益）。
+
+### 9.5 多公告与预设管理
+
+```
+GET/POST         /api/admin/notices
+PUT/DELETE       /api/admin/notices/{id}
+GET/POST         /api/admin/notice/presets
+PUT/DELETE       /api/admin/notice/presets/{id}
+POST             /api/admin/notice/presets/{id}/apply
+PUT              /api/admin/notice/presets/order
+GET/POST         /api/admin/notice/presets/export|import
+```
+
+- **多条公告**：`/api/admin/notices` 返回 `{ rev, limit, notices[] }`；写操作可携带 `rev` 做乐观锁，过期返回 409。上限于环境变量 `MAX_NOTICES`（默认 20）。
+- **时间窗**：每条公告可带 `startAt` / `endAt`（毫秒），服务端在**请求时**求值，到点自动上线/下线，无需定时任务；非法时间窗（`endAt ≤ startAt`）自动把 `endAt` 置空。
+- **预设**：保存一套公告样式与内容（`notice` 快照，天然不含 id / 时间窗），可分组、排序、导出导入，`apply` 时套用到指定公告（可选 `noticeRev` / `noticeId`）。上限由站点设置 `presetLimit` 控制（硬上限 `MAX_NOTICE_PRESETS`，默认 50）。
+- 公开侧读取见 [§2.4](#24-获取公告) 。
 6. **时区**：所有时间戳为 UTC 毫秒，前端/App 用本地时区格式化即可。

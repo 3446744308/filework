@@ -6,6 +6,7 @@ import {
   Input,
   InputNumber,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Switch,
@@ -36,6 +37,9 @@ export default function AdminSettings() {
   const [blockedExts, setBlockedExts] = useState([])
   const [displayMode, setDisplayMode] = useState('simple')
   const [customCodeEnabled, setCustomCodeEnabled] = useState(true)
+  const [compressionEnabled, setCompressionEnabled] = useState(true)
+  const [compressionCodecs, setCompressionCodecs] = useState('br,gzip')
+  const [presetLimit, setPresetLimit] = useState(10)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -48,6 +52,9 @@ export default function AdminSettings() {
       setBlockedExts(settings.blockedExts || [])
       setDisplayMode(settings.displayMode === 'waybill' ? 'waybill' : 'simple')
       setCustomCodeEnabled(settings.customCodeEnabled !== false)
+      setCompressionEnabled(settings.compressionEnabled !== false)
+      setCompressionCodecs(settings.compressionCodecs === 'gzip' ? 'gzip' : 'br,gzip')
+      setPresetLimit(Math.max(1, Math.round(Number(settings.presetLimit) || 10)))
     }
   }, [settings])
 
@@ -66,7 +73,18 @@ export default function AdminSettings() {
       const mb = Number(maxSizeMb)
       const maxFileSize = Number.isFinite(mb) && mb > 0 ? Math.round(mb) * MB : 0
       await api.saveSettings(
-        { siteName, beian, gongan, maxFileSize, blockedExts, displayMode, customCodeEnabled },
+        {
+          siteName,
+          beian,
+          gongan,
+          maxFileSize,
+          blockedExts,
+          displayMode,
+          customCodeEnabled,
+          compressionEnabled,
+          compressionCodecs,
+          presetLimit
+        },
         getAdminKey()
       )
       message.success('设置已保存')
@@ -114,6 +132,9 @@ export default function AdminSettings() {
 
   const logoUrl = logoUrlOf(settings)
   const capMb = Math.max(1, Math.floor((settings?.maxFileSizeCap || 100 * MB) / MB))
+  const codecCap = settings?.compressionCodecCap || 'br,gzip'
+  const brotliAllowed = codecCap.includes('br')
+  const presetLimitCap = Math.max(1, Math.round(Number(settings?.presetLimitCap) || 50))
 
   return (
     <AdminShell>
@@ -229,7 +250,7 @@ export default function AdminSettings() {
                 onChange={setMaxSizeMb}
                 placeholder={`默认 ${capMb}`}
                 style={{ width: '100%' }}
-                addonAfter="MB"
+                suffix="MB"
               />
               <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
                 保存
@@ -258,7 +279,7 @@ export default function AdminSettings() {
           </div>
 
           <div>
-            <Typography.Title level={5}>前端显示样式</Typography.Title>
+            <Typography.Title level={5}>发件成功显示模式</Typography.Title>
             <Space.Compact style={{ width: '100%', maxWidth: 320 }}>
               <Select
                 value={displayMode}
@@ -288,6 +309,64 @@ export default function AdminSettings() {
             </Space>
             <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
               开启后，发件人在填写收件信息时可自定义 6 位数字取件码；关闭后发件页不再显示该输入框，且已提交的自定义码将被忽略并改为自动生成。
+            </Typography.Paragraph>
+          </div>
+
+          <div>
+            <Typography.Title level={5}>公告预设上限</Typography.Title>
+            <Space.Compact style={{ width: '100%', maxWidth: 320 }}>
+              <InputNumber
+                className="preset-limit-input"
+                min={1}
+                max={presetLimitCap}
+                precision={0}
+                value={presetLimit}
+                onChange={setPresetLimit}
+                placeholder="默认 10"
+                style={{ width: '100%' }}
+              />
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存
+              </Button>
+            </Space.Compact>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              管理端「公告设置」可保存的预设数量上限（单位：个），允许范围 1–{presetLimitCap}，默认 10；硬上限由环境变量 MAX_NOTICE_PRESETS
+              决定。调低上限不会删除已有预设，只限制继续新增（超出部分的预设仍可套用/启用/删除）。
+            </Typography.Paragraph>
+          </div>
+
+          <div>
+            <Typography.Title level={5}>存储压缩</Typography.Title>
+            <Space>
+              <Switch checked={compressionEnabled} onChange={setCompressionEnabled} />
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存
+              </Button>
+            </Space>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              开启后，文本、文档等可压缩文件在上传完成时自动按自适应单元压缩存储（内容定界切分 + 逐单元取最小 + 单元级去重，通常可省 50%~95% 磁盘空间）；图片、音视频、压缩包等已压缩格式自动跳过，压缩无收益时保持原样；下载与取件流程不受影响。
+            </Typography.Paragraph>
+          </div>
+
+          <div>
+            <Typography.Title level={5}>压缩编码候选</Typography.Title>
+            <Space wrap>
+              <Radio.Group
+                value={compressionCodecs}
+                onChange={(e) => setCompressionCodecs(e.target.value)}
+                optionType="button"
+                options={[
+                  { label: 'Brotli + gzip 双试（体积最优）', value: 'br,gzip', disabled: !brotliAllowed },
+                  { label: '仅 gzip（CPU 更低）', value: 'gzip' }
+                ]}
+              />
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存
+              </Button>
+            </Space>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              双试：每个单元实测 gzip 与 brotli 后取更小者（文本通常再小 1%~3%，压缩 CPU 约翻倍）；仅 gzip：跳过 brotli 尝试，CPU 减半、体积略大，适合服务器 CPU 吃紧时降级。
+              环境变量 COMPRESS_CODECS（当前 {codecCap}）是硬上限，为 gzip 时此项不可切换；仅影响此后新上传的文件，已存文件保持原编码。
             </Typography.Paragraph>
           </div>
         </Space>

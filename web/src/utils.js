@@ -69,6 +69,20 @@ export function formatSpeed(bytesPerSecond) {
   return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`
 }
 
+// 公告样式（配色 + 字号/圆角/透明度）：0/空 = 跟随默认主题；公告条与弹窗内容块共用。
+export function noticeColors(notice) {
+  if (!notice) return undefined
+  const style = {}
+  if (notice.bgColor) style.background = notice.bgColor
+  if (notice.textColor) style.color = notice.textColor
+  if (Number(notice.fontSize) > 0) style.fontSize = `${Math.round(Number(notice.fontSize))}px`
+  if (Number(notice.radius) > 0) style.borderRadius = `${Math.round(Number(notice.radius))}px`
+  if (Number(notice.opacity) > 0 && Number(notice.opacity) < 100) {
+    style.opacity = Number(notice.opacity) / 100
+  }
+  return Object.keys(style).length > 0 ? style : undefined
+}
+
 export function timeLeft(expiresAt) {
   const diff = expiresAt - Date.now()
   if (diff <= 0) return '已过期'
@@ -77,6 +91,31 @@ export function timeLeft(expiresAt) {
   const hours = Math.floor(minutes / 60)
   if (hours < 48) return `${hours} 小时`
   return `${Math.floor(hours / 24)} 天`
+}
+
+export function readLocalJson(key) {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+export function writeLocalJson(key, value) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, JSON.stringify(value))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function removeLocal(key) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(key)
+  } catch {}
 }
 
 export async function copyText(text) {

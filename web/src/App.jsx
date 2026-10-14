@@ -159,7 +159,7 @@ export default function App() {
               onClick={() => setDrawerOpen(false)}
             />
           </Drawer>
-          <NoticeBar />
+          <NoticeBar slot="top" />
         </>
       )}
       <Routes>
@@ -184,27 +184,30 @@ export default function App() {
         />
       </Routes>
       {!isAdmin && (
-        <footer className="site-footer">
-          {(settings?.beian || settings?.gongan) && (
-            <div className="site-footer-row">
-              {settings.beian && (
-                <span className="site-footer-item">
-                  <img className="site-footer-icon" src="/icons/icp.webp" alt="ICP 备案" />
-                  {settings.beian}
-                </span>
-              )}
-              {settings.gongan && (
-                <span className="site-footer-item">
-                  <img className="site-footer-icon" src="/icons/gonganbeian.png" alt="公安备案" />
-                  {settings.gongan}
-                </span>
-              )}
+        <>
+          <NoticeBar slot="bottom" />
+          <footer className="site-footer">
+            {(settings?.beian || settings?.gongan) && (
+              <div className="site-footer-row">
+                {settings.beian && (
+                  <span className="site-footer-item">
+                    <img className="site-footer-icon" src="/icons/icp.webp" alt="ICP 备案" />
+                    {settings.beian}
+                  </span>
+                )}
+                {settings.gongan && (
+                  <span className="site-footer-item">
+                    <img className="site-footer-icon" src="/icons/gonganbeian.png" alt="公安备案" />
+                    {settings.gongan}
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="site-footer-copy">
+              © 2025-{Math.max(new Date().getFullYear(), 2026)} YayaLe, FanKunLe. All Rights Reserved.
             </div>
-          )}
-          <div className="site-footer-copy">
-            © 2025-{Math.max(new Date().getFullYear(), 2026)} YayaLe, FanKunLe. All Rights Reserved.
-          </div>
-        </footer>
+          </footer>
+        </>
       )}
     </Layout>
   )
