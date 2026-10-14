@@ -22,7 +22,22 @@ const DEFAULT_SETTINGS = {
   blockedExts: [],
   displayMode: 'simple',
   customCodeEnabled: true,
+  compressionEnabled: true,
+  compressionCodecs: ['br', 'gzip'],
+  presetLimit: 0,
   updatedAt: 0
+}
+
+const DEFAULT_PRESET_LIMIT = 10
+
+const CODEC_NAMES = ['br', 'gzip']
+
+function normalizeCodecs(value) {
+  const raw = Array.isArray(value) ? value : String(value ?? '').split(',')
+  const names = raw
+    .map((name) => String(name).trim().toLowerCase())
+    .filter((name) => CODEC_NAMES.includes(name))
+  return names.includes('br') ? ['br', 'gzip'] : ['gzip']
 }
 
 function normalizeExts(value) {
@@ -68,6 +83,16 @@ export function saveSettings(input) {
     data.displayMode = input.displayMode === 'waybill' ? 'waybill' : 'simple'
   }
   if ('customCodeEnabled' in input) data.customCodeEnabled = Boolean(input.customCodeEnabled)
+  if ('compressionEnabled' in input) data.compressionEnabled = Boolean(input.compressionEnabled)
+  if ('compressionCodecs' in input) data.compressionCodecs = normalizeCodecs(input.compressionCodecs)
+  if ('presetLimit' in input) {
+    // 0 / 非法值 = 回到默认上限；否则钳制到 [1, MAX_NOTICE_PRESETS]。
+    const value = Number(input.presetLimit)
+    data.presetLimit =
+      Number.isFinite(value) && value > 0
+        ? Math.max(1, Math.min(Math.round(value), config.maxNoticePresets))
+        : 0
+  }
   data.updatedAt = Date.now()
   writeSettings(data)
   return data
@@ -79,6 +104,30 @@ export function getBlockedExts() {
 
 export function isCustomCodeEnabled() {
   return getSettings().customCodeEnabled !== false
+}
+
+export function getCompressionEnabled() {
+  return getSettings().compressionEnabled !== false
+}
+
+export function getCompressionCodecs() {
+  const allowed = config.compressionCodecs
+  const wanted = normalizeCodecs(getSettings().compressionCodecs)
+  const effective = wanted.filter((name) => allowed.includes(name))
+  if (effective.length > 0) return effective
+  return allowed.includes('gzip') ? ['gzip'] : allowed
+}
+
+export function getCompressionCodecCap() {
+  return config.compressionCodecs
+}
+
+// 公告预设上限：站点设置可调（0 = 默认 10），env `MAX_NOTICE_PRESETS` 同时是默认硬上限。
+export function effectivePresetLimit() {
+  const cap = config.maxNoticePresets
+  const stored = Number(getSettings().presetLimit)
+  const wanted = Number.isFinite(stored) && stored > 0 ? Math.round(stored) : DEFAULT_PRESET_LIMIT
+  return Math.max(1, Math.min(wanted, cap))
 }
 
 export function effectiveMaxFileSize() {

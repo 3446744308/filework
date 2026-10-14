@@ -11,7 +11,8 @@
     "dev": "node scripts/dev.js",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node scripts/test.js"
+    "test": "node scripts/test.js",
+    "e2e": "node scripts/e2e-browser.js"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",

@@ -26,9 +26,10 @@ function sweep() {
 const sweeper = setInterval(sweep, 60_000)
 sweeper.unref()
 
-export function missGuard(limit, windowMs = 60_000, scope = '') {
+// bucket 可选：不同业务可各自分桶（如反馈号查询用 'fbquery'），互不挤占取件码的失败次数。
+export function missGuard(limit, windowMs = 60_000, bucket = 'miss') {
   return (req, res, next) => {
-    const key = `miss:${scope}:${req.ip}`
+    const key = `${bucket}:${req.ip}`
     const r = hit(key, limit, windowMs)
     if (r.blocked) {
       return res.status(429).json({ error: '尝试过于频繁，请 1 分钟后再试' })

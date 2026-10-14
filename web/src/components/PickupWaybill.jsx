@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Input, Space } from 'antd'
-import { DownloadOutlined, InboxOutlined } from '@ant-design/icons'
+import { DownloadOutlined, HomeOutlined, InboxOutlined } from '@ant-design/icons'
 import { api } from '../api.js'
 import { formatBytes, formatDateTimeTz, timeLeft, waybillNoOf } from '../utils.js'
 import { QrCode, Barcode, FEATURES } from './WaybillParts.jsx'
@@ -14,7 +14,8 @@ export default function PickupWaybill({
   password,
   onPasswordChange,
   onDownload,
-  onChangeCode
+  onChangeCode,
+  onGoHome
 }) {
   const waybillNo = waybillNoOf(info.createdAt, info.code)
   const brand = siteName || '文件驿站'
@@ -169,6 +170,11 @@ export default function PickupWaybill({
       <div className="waybill-actions">
         <Space wrap>
           <Button onClick={onChangeCode}>换个取件码</Button>
+          {onGoHome && (
+            <Button icon={<HomeOutlined />} onClick={onGoHome}>
+              返回首页
+            </Button>
+          )}
         </Space>
       </div>
     </div>

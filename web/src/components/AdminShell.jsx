@@ -23,14 +23,14 @@ const MENU_ITEMS = [
     label: <Link to="/admin/files">文件管理</Link>
   },
   {
-    key: '/admin/feedback',
-    icon: <MessageOutlined />,
-    label: <Link to="/admin/feedback">反馈管理</Link>
-  },
-  {
     key: '/admin/settings',
     icon: <SettingOutlined />,
     label: <Link to="/admin/settings">设置</Link>
+  },
+  {
+    key: '/admin/feedback',
+    icon: <MessageOutlined />,
+    label: <Link to="/admin/feedback">反馈管理</Link>
   }
 ]
 
@@ -50,10 +50,10 @@ export default function AdminShell({ children }) {
 
   const selected = location.pathname.startsWith('/admin/files')
     ? '/admin/files'
-    : location.pathname.startsWith('/admin/feedback')
-      ? '/admin/feedback'
-      : location.pathname.startsWith('/admin/settings')
-        ? '/admin/settings'
+    : location.pathname.startsWith('/admin/settings')
+      ? '/admin/settings'
+      : location.pathname.startsWith('/admin/feedback')
+        ? '/admin/feedback'
         : '/admin'
   const sidebarLogo = logoUrlOf(settings)
 

@@ -27,6 +27,7 @@ import {
   FilePptOutlined,
   FileWordOutlined,
   FileZipOutlined,
+  HomeOutlined,
   InboxOutlined,
   LinkOutlined
 } from '@ant-design/icons'
@@ -35,7 +36,7 @@ import qrcode from 'qrcode-generator'
 import { api } from '../api.js'
 import { useSettings, logoUrlOf } from '../hooks/useSettings.js'
 import WaybillReceipt from '../components/WaybillReceipt.jsx'
-import { copyText, formatBytes, formatSpeed, formatTime, timeLeft } from '../utils.js'
+import { copyText, formatBytes, formatSpeed, formatTime, noticeColors, timeLeft } from '../utils.js'
 
 const { Text, Paragraph } = Typography
 
@@ -88,6 +89,8 @@ const STEP_ITEMS = [
   { title: '填写收件信息' },
   { title: '发件回执' }
 ]
+
+const CHUNKED_MIN_SIZE = 1024 * 1024
 
 function fileIconOf(name) {
   const ext = (name || '').split('.').pop().toLowerCase()
@@ -144,8 +147,10 @@ export default function Upload() {
   const [customCode, setCustomCode] = useState('')
   const [password, setPassword] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [compressing, setCompressing] = useState(false)
   const [progress, setProgress] = useState({ percent: 0, loaded: 0, total: 0, speed: 0 })
   const speedRef = useRef({ lastLoaded: 0, lastTime: 0, speed: 0 })
+  const resumeRef = useRef(false)
   const [result, setResult] = useState(null)
   const [notice, setNotice] = useState(null)
 
@@ -172,6 +177,7 @@ export default function Upload() {
   const resetAll = () => {
     setResult(null)
     setStep(0)
+    setCompressing(false)
     clearFile()
     setNote('')
     setCustomCode('')
@@ -180,7 +186,11 @@ export default function Upload() {
     setMaxDownloads(5)
   }
 
-  const handleProgress = ({ percent, loaded, total }) => {
+  const handleProgress = ({ percent, loaded, total, resume }) => {
+    if (resume && !resumeRef.current) {
+      resumeRef.current = true
+      message.info(`已恢复上次未完成的上传（${resume.receivedParts}/${resume.totalParts} 片）`)
+    }
     const s = speedRef.current
     const now = performance.now()
     if (!s.lastTime) {
@@ -200,17 +210,36 @@ export default function Upload() {
 
   const doUpload = async (code) => {
     speedRef.current = { lastLoaded: 0, lastTime: 0, speed: 0 }
+    resumeRef.current = false
     setProgress({ percent: 0, loaded: 0, total: 0, speed: 0 })
     setUploading(true)
     try {
-      const data = await api.upload(file, {
+      const options = {
         expiresIn,
         maxDownloads,
         note: note.trim(),
         customCode: code,
         password: password.trim(),
         onProgress: handleProgress
-      })
+      }
+      const data =
+        file.size > CHUNKED_MIN_SIZE
+          ? await api.uploadChunked(file, options)
+          : await api.upload(file, options)
+      // 压缩已后台化：complete 返回时文件已落位，但压缩结论随后才回写。
+      // 这里等任务落定再进结果页，避免用户以「已保存」误以为压缩已完成。
+      if (data.compressionState === 'pending') {
+        setUploading(false)
+        setCompressing(true)
+        const job = await api.waitUploadJob({ code: data.code })
+        setCompressing(false)
+        if (job && job.status === 'failed') {
+          message.warning('文件已保存，但后台压缩失败（已按未压缩存储）')
+        } else if (job) {
+          data.compressed = job.compressed
+          data.storedSize = job.storedSize
+        }
+      }
       setResult(data)
       setStep(2)
       clearFile()
@@ -299,7 +328,9 @@ export default function Upload() {
               <Button type="primary" icon={<CloudUploadOutlined />} onClick={resetAll}>
                 继续发件
               </Button>
-              <Button onClick={() => navigate('/')}>返回首页</Button>
+              <Button icon={<HomeOutlined />} onClick={resetAll}>
+                返回首页
+              </Button>
             </div>
           </Card>
         </div>
@@ -370,6 +401,9 @@ export default function Upload() {
                 <Button icon={<DownloadOutlined />} onClick={() => navigate(`/d/${result.code}`)}>
                   去取件页看看
                 </Button>
+                <Button icon={<HomeOutlined />} onClick={resetAll}>
+                  返回首页
+                </Button>
               </Space>
             </div>
           </Result>
@@ -392,7 +426,9 @@ export default function Upload() {
           </Button>
         }
       >
-        <div className="notice-content">{notice?.content}</div>
+        <div className="notice-content" style={noticeColors(notice)}>
+          {notice?.content}
+        </div>
       </Modal>
       <div className="page">
         <Card>
@@ -528,18 +564,19 @@ export default function Upload() {
                 />
               </div>
 
-              {uploading && (
+              {(uploading || compressing) && (
                 <div className="upload-progress">
                   <div className="upload-progress-info">
                     <span className="upload-progress-file" title={file?.name}>
                       {file?.name}
                     </span>
                     <span className="upload-progress-meta">
-                      {formatSpeed(progress.speed)} · {formatBytes(progress.loaded)} /{' '}
-                      {formatBytes(progress.total)}
+                      {compressing
+                        ? '服务端压缩存储中，请稍候…'
+                        : `${formatSpeed(progress.speed)} · ${formatBytes(progress.loaded)} / ${formatBytes(progress.total)}`}
                     </span>
                   </div>
-                  <Progress percent={progress.percent} status="active" />
+                  <Progress percent={compressing ? 100 : progress.percent} status="active" />
                 </div>
               )}
 
@@ -551,12 +588,12 @@ export default function Upload() {
                   type="primary"
                   size="large"
                   icon={<CloudUploadOutlined />}
-                  loading={uploading}
+                  loading={uploading || compressing}
                   disabled={!file}
                   onClick={handleUpload}
                   style={{ flex: 1 }}
                 >
-                  {uploading ? '上传中…' : '确认发件'}
+                  {compressing ? '压缩中…' : uploading ? '上传中…' : '确认发件'}
                 </Button>
               </div>
             </>

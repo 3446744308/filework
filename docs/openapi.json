@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "文件驿站 API",
-    "description": "类快递驿站的匿名文件共享服务。上传文件获得 6 位取件码，对方凭码下载。无需登录；分享在有效期或下载次数耗尽后自动销毁。",
-    "version": "1.0.0",
+    "description": "类快递驿站的匿名文件共享服务。上传文件获得 6 位取件码，对方凭码下载。无需登录；分享在有效期或下载次数耗尽后自动销毁。除整文件收发外，还提供分片上传/断点续传、压缩任务进度、分片下载会话、意见反馈，以及多公告与预设管理。",
+    "version": "1.1.0",
     "contact": {
       "name": "文件驿站"
     }
@@ -20,8 +20,10 @@
   ],
   "tags": [
     { "name": "公开", "description": "无需鉴权的公开接口" },
-    { "name": "上传", "description": "文件上传" },
+    { "name": "上传", "description": "文件上传（含分片与断点续传）" },
     { "name": "取件", "description": "查询 / 验证密码 / 下载" },
+    { "name": "传输", "description": "压缩任务与分片下载会话" },
+    { "name": "反馈", "description": "意见反馈提交与进度查询" },
     { "name": "管理", "description": "需 x-admin-key 请求头" }
   ],
   "paths": {
@@ -39,7 +41,7 @@
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
                 "example": {
                   "ok": true,
-                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan", "feedback"]
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "compression", "chunkedUpload", "parallelDownload", "downloadSession", "transferCompression", "adaptiveChunking", "unitDedup", "multiCodec", "transferStats", "codecToggle", "transferExport", "uploadResume", "downloadResume", "sessionQuota", "multiNotice", "compressQueue", "crossFileDedup", "beian", "gongan", "feedback"]
                 }
               }
             }
@@ -505,6 +507,307 @@
         }
       }
     },
+    "/api/upload/init": {
+      "post": {
+        "tags": ["上传"],
+        "summary": "创建 / 恢复分片上传会话",
+        "description": "带 uploadId 时为续传：文件（filename + size）一致则返回原会话与已收分片，且不占用会话配额、不计入上传频率。新建会话受每 IP 上传频率与在途配额（MAX_UPLOAD_SESSIONS_PER_IP / MAX_TMP_BYTES_PER_IP）限制。partSize 默认为 TRANSFER_PART_SIZE，仅当按该尺寸会超出分片数上限时自动向上翻倍，以响应回传值为准。",
+        "operationId": "initUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["filename", "size"],
+                "properties": {
+                  "filename": { "type": "string", "example": "报告.pdf" },
+                  "size": { "type": "integer", "example": 41943040 },
+                  "mime": { "type": "string", "example": "application/pdf" },
+                  "uploadId": { "type": "string", "description": "续传时带上次的 uploadId" },
+                  "expiresIn": { "type": "integer", "enum": [1, 24, 72, 168] },
+                  "maxDownloads": { "type": "integer", "enum": [1, 3, 5, 10] },
+                  "note": { "type": "string" },
+                  "customCode": { "type": "string", "description": "6 位数字，冲突返回 409" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "会话已创建或已恢复",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "uploadId": { "type": "string" },
+                    "partSize": { "type": "integer" },
+                    "totalParts": { "type": "integer" },
+                    "resumed": { "type": "boolean" },
+                    "received": { "type": "array", "items": { "type": "integer" } }
+                  }
+                },
+                "example": { "uploadId": "8f0c1d2e3a4b5c6d", "partSize": 4194304, "totalParts": 10, "resumed": false, "received": [] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "description": "自定义取件码冲突，或 uploadId 与文件不匹配" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/upload/part": {
+      "put": {
+        "tags": ["上传"],
+        "summary": "上传一个分片",
+        "description": "请求体为该分片的原始字节（非 multipart）。长度必须精确等于该分片应有长度（末片为余数），否则 400。分片可并发、可乱序、可重传。",
+        "operationId": "uploadPart",
+        "parameters": [
+          { "name": "uploadId", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "index", "in": "query", "required": true, "schema": { "type": "integer", "minimum": 0 } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "分片已写入",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "ok": { "type": "boolean" }, "received": { "type": "integer" } }
+                },
+                "example": { "ok": true, "received": 3 }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/TooLarge" }
+        }
+      }
+    },
+    "/api/upload/complete": {
+      "post": {
+        "tags": ["上传"],
+        "summary": "合并分片并落位",
+        "description": "分片不全或大小校验失败返回 400。压缩为后台任务：响应中的 compressionState 为 pending 时用 /api/upload/job 轮询到 finished 再取最终 compressed / storedSize。",
+        "operationId": "completeUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "required": ["uploadId"], "properties": { "uploadId": { "type": "string" } } }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "上传成功",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UploadResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "自定义取件码冲突" }
+        }
+      }
+    },
+    "/api/upload/status": {
+      "get": {
+        "tags": ["上传"],
+        "summary": "查询分片上传会话进度",
+        "description": "断线重连后先查已收分片，再补传缺失分片。",
+        "operationId": "uploadStatus",
+        "parameters": [
+          { "name": "uploadId", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "会话详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "uploadId": { "type": "string" },
+                    "filename": { "type": "string" },
+                    "size": { "type": "integer" },
+                    "mime": { "type": "string" },
+                    "partSize": { "type": "integer" },
+                    "totalParts": { "type": "integer" },
+                    "received": { "type": "array", "items": { "type": "integer" } },
+                    "expiresAt": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/upload/job": {
+      "get": {
+        "tags": ["传输"],
+        "summary": "压缩任务进度",
+        "description": "按取件码或 uploadId 查询后台压缩任务；finished 为 true 时 compressed / storedSize 才是最终值。",
+        "operationId": "uploadJob",
+        "parameters": [
+          { "name": "code", "in": "query", "required": false, "schema": { "type": "string", "pattern": "^\\d{6}$" } },
+          { "name": "uploadId", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "任务状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["pending", "running", "done", "failed"] },
+                    "error": { "type": "string" },
+                    "compressed": { "type": "boolean" },
+                    "storedSize": { "type": "integer" },
+                    "compressionState": { "type": "string" },
+                    "finished": { "type": "boolean" }
+                  }
+                },
+                "example": { "status": "done", "error": "", "compressed": true, "storedSize": 327680, "compressionState": "done", "finished": true }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/download/session": {
+      "post": {
+        "tags": ["传输"],
+        "summary": "创建分片下载会话",
+        "description": "此步即消耗 1 次下载次数，务必复用同一 token 直至下载完成。返回服务端给出的自适应分片计划 units 与建议并发 parallel。",
+        "operationId": "createDownloadSession",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["code"],
+                "properties": {
+                  "code": { "type": "string", "example": "832451" },
+                  "password": { "type": "string", "description": "分享设密时必填" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "会话已创建（已扣 1 次下载次数）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": { "type": "string" },
+                    "partSize": { "type": "integer" },
+                    "filename": { "type": "string" },
+                    "size": { "type": "integer" },
+                    "mime": { "type": "string" },
+                    "expiresAt": { "type": "integer" },
+                    "compressed": { "type": "boolean" },
+                    "units": { "type": "array", "items": { "type": "array", "items": { "type": "integer" } }, "description": "[[start, end], ...] 字节区间" },
+                    "unitCount": { "type": "integer" },
+                    "parallel": { "type": "integer", "description": "建议并发 2~8" }
+                  }
+                },
+                "example": {
+                  "token": "3b1f...",
+                  "partSize": 4194304,
+                  "filename": "报告.pdf",
+                  "size": 10485760,
+                  "mime": "application/pdf",
+                  "expiresAt": 1760001200000,
+                  "compressed": true,
+                  "units": [[0, 4194304], [4194304, 8388608], [8388608, 10485760]],
+                  "unitCount": 3,
+                  "parallel": 3
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "description": "文件正在后台处理中（压缩未收尾），稍后重试" }
+        }
+      }
+    },
+    "/api/download/status": {
+      "get": {
+        "tags": ["传输"],
+        "summary": "查询下载会话与分片计划",
+        "description": "断点续传前用它拿回 units（服务端可能因压缩收尾而改变计划），不会再次消耗下载次数。",
+        "operationId": "downloadStatus",
+        "parameters": [
+          { "name": "token", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "与创建会话同构（含 token / units / parallel）" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "description": "文件正在后台处理中" }
+        }
+      }
+    },
+    "/api/download/part": {
+      "get": {
+        "tags": ["传输"],
+        "summary": "取一个分片（原始字节）",
+        "description": "按 index（推荐，取自 units 下标）或 start/end 取分片，响应体始终是「原始文件字节」：若声明了 Accept-Encoding: br/gzip，服务端可能直发存储态编码并置 Content-Encoding，由 HTTP 层自动解压，客户端不要再手动解压。响应头 X-Transfer-Mode / X-Transfer-Codec / X-Transfer-Part 可用于观测与统计。",
+        "operationId": "downloadPart",
+        "parameters": [
+          { "name": "token", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "index", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "start", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0 }, "description": "与 end 成对使用，跨度不得超过 partSize" },
+          { "name": "end", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "分片字节流",
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "description": "文件正在后台处理中" }
+        }
+      }
+    },
+    "/api/download/end": {
+      "post": {
+        "tags": ["传输"],
+        "summary": "结束下载会话",
+        "description": "释放会话与引用；释放后如需继续下载要重新创建会话（会再消耗一次下载次数）。",
+        "operationId": "endDownloadSession",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "required": ["token"], "properties": { "token": { "type": "string" } } }
+            }
+          }
+        },
+        "responses": { "200": { "description": "已结束", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ok" } } } } }
+      }
+    },
     "/api/admin/ping": {
       "get": {
         "tags": ["管理"],
@@ -605,6 +908,211 @@
             }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/stats/export": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "导出传输维度明细 CSV",
+        "description": "返回 UTF-8 BOM 的 CSV（按日 / 按文件维度），文件名带时间戳。",
+        "operationId": "exportTransferStats",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": { "description": "CSV 文件", "content": { "text/csv": { "schema": { "type": "string" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/stats/reset": {
+      "post": {
+        "tags": ["管理"],
+        "summary": "清零传输统计",
+        "description": "必须显式确认：body 必须为 { \"confirm\": true }，否则 400。清零后 transferResetCount +1。",
+        "operationId": "resetTransferStats",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "required": ["confirm"], "properties": { "confirm": { "type": "boolean", "enum": [true] } } }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "已清零（返回 resetAt / resetCount）" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/notices": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "公告快照",
+        "description": "返回 { rev, limit, notices[] }：rev 用于写操作乐观锁，notices 已按仲裁序排列。",
+        "operationId": "adminListNotices",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": { "description": "公告快照" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["管理"],
+        "summary": "新建公告",
+        "description": "支持优先级 priority（0~100，≥100 抢占弹窗位）与投放时间窗 startAt / endAt（毫秒，服务端在请求时求值）。上限 MAX_NOTICES（默认 20），超出返回 409。",
+        "operationId": "adminCreateNotice",
+        "security": [{ "AdminKey": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoticeUpdate" } } } },
+        "responses": {
+          "201": { "description": "已创建" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "达到公告条数上限或与被他人修改的 rev 冲突" }
+        }
+      }
+    },
+    "/api/admin/notices/{id}": {
+      "put": {
+        "tags": ["管理"],
+        "summary": "更新公告",
+        "description": "可带 rev 做乐观锁，过期返回 409。",
+        "operationId": "adminUpdateNotice",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoticeUpdate" } } } },
+        "responses": {
+          "200": { "description": "已更新" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "rev 冲突" }
+        }
+      },
+      "delete": {
+        "tags": ["管理"],
+        "summary": "删除公告",
+        "operationId": "adminDeleteNotice",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "已删除" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/admin/notice/presets": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "预设列表",
+        "description": "返回 { limit, limitCap, presets[] }；预设含分组 group、排序 order 与启用审计（appliedAt / appliedBy / appliedCount）。",
+        "operationId": "adminListPresets",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": { "description": "预设列表" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["管理"],
+        "summary": "新建预设",
+        "description": "保存一套公告样式与内容快照（天然不含 id / 时间窗）。上限由站点设置 presetLimit 控制，硬上限 MAX_NOTICE_PRESETS（默认 50），超出返回 409。",
+        "operationId": "adminCreatePreset",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "201": { "description": "已创建" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "达到预设上限" }
+        }
+      }
+    },
+    "/api/admin/notice/presets/order": {
+      "put": {
+        "tags": ["管理"],
+        "summary": "预设排序",
+        "description": "body 为 { ids: [...] }，按数组顺序重排。",
+        "operationId": "adminReorderPresets",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": { "description": "已重排" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/notice/presets/export": {
+      "get": {
+        "tags": ["管理"],
+        "summary": "导出预设 JSON",
+        "description": "带格式与版本号的文件下载，可用于备份或迁移。",
+        "operationId": "adminExportPresets",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": { "description": "预设 JSON 文件" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/notice/presets/import": {
+      "post": {
+        "tags": ["管理"],
+        "summary": "导入预设 JSON",
+        "description": "校验格式与版本号后合并导入，返回导入结果与截断信息。",
+        "operationId": "adminImportPresets",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": { "description": "已导入" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "导入后超出上限" }
+        }
+      }
+    },
+    "/api/admin/notice/presets/{id}": {
+      "put": {
+        "tags": ["管理"],
+        "summary": "更新预设",
+        "operationId": "adminUpdatePreset",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "已更新" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "rev 冲突" }
+        }
+      },
+      "delete": {
+        "tags": ["管理"],
+        "summary": "删除预设",
+        "operationId": "adminDeletePreset",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "已删除" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/admin/notice/presets/{id}/apply": {
+      "post": {
+        "tags": ["管理"],
+        "summary": "套用预设到公告",
+        "description": "body 可带 noticeId（目标公告，缺省为 default）与 noticeRev（目标公告当前版本，用于乐观锁）；达上限时前端会走「满替换」流程。返回套用后的 notice 与 preset。",
+        "operationId": "adminApplyPreset",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "已套用（并写入启用审计）" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "公告 rev 冲突" }
         }
       }
     },
@@ -790,6 +1298,37 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "已部署功能标记"
+          },
+          "notice": {
+            "type": "object",
+            "description": "公告槽位统计（total / active / winnerId / nextChangeAt）",
+            "properties": {
+              "total": { "type": "integer" },
+              "active": { "type": "integer" },
+              "winnerId": { "type": "string" },
+              "nextChangeAt": { "type": "integer", "nullable": true }
+            }
+          },
+          "compressQueue": {
+            "type": "object",
+            "description": "压缩后台队列状态（pending / running / done / failed）",
+            "properties": {
+              "pending": { "type": "integer" },
+              "running": { "type": "integer" },
+              "done": { "type": "integer" },
+              "failed": { "type": "integer" }
+            }
+          },
+          "dedup": {
+            "type": "object",
+            "description": "跨文件去重状态（CROSS_FILE_DEDUP=on 时才有对象统计）",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "objects": { "type": "integer" },
+              "bytes": { "type": "integer", "format": "int64" },
+              "lastGcRemoved": { "type": "integer" },
+              "lastGcAt": { "type": "integer" }
+            }
           }
         }
       },
@@ -815,7 +1354,10 @@
           {
             "type": "object",
             "properties": {
-              "clientIp": { "type": "string", "description": "寄件方 IP（仅上传响应回传，不出现在 /api/info）" }
+              "clientIp": { "type": "string", "description": "寄件方 IP（仅上传响应回传，不出现在 /api/info）" },
+              "storedSize": { "type": "integer", "format": "int64", "description": "当前落盘字节数；压缩为后台任务，可能随后变小" },
+              "compressionState": { "type": "string", "enum": ["", "pending"], "description": "pending = 压缩排队中；空串 = 无需压缩或已完成" },
+              "compressed": { "type": "boolean", "description": "是否已压入自适应单元容器；pending 时先用 /api/upload/job 轮询到 finished 再取最终值" }
             }
           }
         ]
@@ -870,6 +1412,11 @@
           "blockedExts": { "type": "array", "items": { "type": "string" }, "description": "禁止上传的后缀（无点、小写）" },
           "displayMode": { "type": "string", "enum": ["simple", "waybill"], "description": "前端显示样式" },
           "customCodeEnabled": { "type": "boolean", "description": "是否允许自定义取件码" },
+          "compressionEnabled": { "type": "boolean", "description": "是否开启存储压缩" },
+          "compressionCodecs": { "type": "string", "description": "生效的压缩编码候选，br,gzip 或 gzip" },
+          "compressionCodecCap": { "type": "string", "description": "环境变量 COMPRESS_CODECS 给的硬上限" },
+          "presetLimit": { "type": "integer", "description": "公告预设上限（生效值）" },
+          "presetLimitCap": { "type": "integer", "description": "公告预设上限的环境硬上限" },
           "updatedAt": { "type": "integer", "format": "int64" }
         }
       },
@@ -882,7 +1429,10 @@
           "maxFileSize": { "type": "integer", "format": "int64", "description": "字节；≤0 恢复 env 默认" },
           "blockedExts": { "type": "array", "items": { "type": "string" } },
           "displayMode": { "type": "string", "enum": ["simple", "waybill"] },
-          "customCodeEnabled": { "type": "boolean" }
+          "customCodeEnabled": { "type": "boolean" },
+          "compressionEnabled": { "type": "boolean" },
+          "compressionCodecs": { "type": "string", "description": "br,gzip 或 gzip；受 COMPRESS_CODECS 限制" },
+          "presetLimit": { "type": "integer", "description": "0 或非法值 = 回到默认上限 10" }
         }
       },
       "SettingsResponse": {
@@ -894,12 +1444,28 @@
       },
       "Notice": {
         "type": "object",
+        "description": "公开公告：顶层字段 = 当前仲裁胜者（兼容单公告时代的读取方式），notices[] = 全部生效公告。",
         "properties": {
+          "id": { "type": "string" },
           "enabled": { "type": "boolean" },
           "title": { "type": "string", "maxLength": 100 },
           "content": { "type": "string", "maxLength": 2000 },
           "display": { "type": "string", "enum": ["modal", "bar", "both"] },
-          "updatedAt": { "type": "integer", "format": "int64" }
+          "position": { "type": "string", "enum": ["top", "bottom"] },
+          "scroll": { "type": "string", "enum": ["none", "left", "right", "up", "bounce"] },
+          "scrollFill": { "type": "boolean", "description": "滚动不足一屏时是否拉伸铺满" },
+          "bgColor": { "type": "string", "description": "自定义底色，空串跟随主题" },
+          "textColor": { "type": "string", "description": "自定义文字色，空串跟随主题" },
+          "fontSize": { "type": "integer", "description": "字号（px），0 跟随默认" },
+          "radius": { "type": "integer", "description": "圆角（px），0 跟随默认" },
+          "opacity": { "type": "integer", "description": "不透明度（%），0 跟随默认" },
+          "maxLines": { "type": "integer", "enum": [1, 2, 3], "description": "纵向行数上限" },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 100, "description": "仲裁优先级，≥100 抢占弹窗位" },
+          "startAt": { "type": "integer", "format": "int64", "nullable": true, "description": "投放开始时间；null = 不限" },
+          "endAt": { "type": "integer", "format": "int64", "nullable": true, "description": "投放结束时间；null = 不限" },
+          "rev": { "type": "integer", "description": "公告存储版本号（写接口乐观锁基准）" },
+          "updatedAt": { "type": "integer", "format": "int64" },
+          "notices": { "type": "array", "items": { "type": "object" }, "description": "当前生效的全部公告，按仲裁序排列" }
         }
       },
       "NoticeUpdate": {
@@ -908,7 +1474,20 @@
           "enabled": { "type": "boolean" },
           "title": { "type": "string", "maxLength": 100 },
           "content": { "type": "string", "maxLength": 2000 },
-          "display": { "type": "string", "enum": ["modal", "bar", "both"] }
+          "display": { "type": "string", "enum": ["modal", "bar", "both"] },
+          "position": { "type": "string", "enum": ["top", "bottom"] },
+          "scroll": { "type": "string", "enum": ["none", "left", "right", "up", "bounce"] },
+          "scrollFill": { "type": "boolean" },
+          "bgColor": { "type": "string" },
+          "textColor": { "type": "string" },
+          "fontSize": { "type": "integer" },
+          "radius": { "type": "integer" },
+          "opacity": { "type": "integer" },
+          "maxLines": { "type": "integer", "enum": [1, 2, 3] },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "startAt": { "type": "integer", "format": "int64", "nullable": true },
+          "endAt": { "type": "integer", "format": "int64", "nullable": true },
+          "rev": { "type": "integer", "description": "提交前读到的 rev；不一致返回 409" }
         }
       },
       "NoticeResponse": {
@@ -961,7 +1540,33 @@
           "totalSize": { "type": "integer", "format": "int64", "description": "当前有效分享总大小（字节）" },
           "activeDownloads": { "type": "integer", "description": "当前有效分享累计已下载次数之和" },
           "totalUploads": { "type": "integer", "description": "历史累计上传次数" },
-          "totalDownloads": { "type": "integer", "description": "历史累计下载次数" }
+          "totalDownloads": { "type": "integer", "description": "历史累计下载次数" },
+          "totalStoredSize": { "type": "integer", "format": "int64", "description": "存储态实际占用（含压缩与去重后）" },
+          "savedBytes": { "type": "integer", "format": "int64", "description": "存储压缩节省字节" },
+          "transferOriginalBytes": { "type": "integer", "format": "int64", "description": "客户端原始需求字节" },
+          "transferWireBytes": { "type": "integer", "format": "int64", "description": "实际过网字节" },
+          "transferSavedBytes": { "type": "integer", "format": "int64", "description": "传输压缩节省字节" },
+          "transferToday": { "type": "object", "description": "今日传输维度（date / originalBytes / wireBytes / parts / savedBytes）" },
+          "transferDays": { "type": "array", "items": { "type": "object" }, "description": "近 7 日传输维度明细" },
+          "transferResetAt": { "type": "integer", "format": "int64", "description": "上次清零时间" },
+          "transferResetCount": { "type": "integer", "description": "清零次数" },
+          "sessionQuota": {
+            "type": "object",
+            "description": "会话配额用量（含 topIps：上传 / 下载会话数与待处理临时空间）",
+            "properties": {
+              "maxUploadSessionsPerIp": { "type": "integer" },
+              "maxDownloadSessionsPerIp": { "type": "integer" },
+              "maxTmpBytesPerIp": { "type": "integer", "format": "int64" },
+              "topIps": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "dedupCrossEnabled": { "type": "boolean", "description": "跨文件去重开关（CROSS_FILE_DEDUP）" },
+          "dedupCrossManifests": { "type": "integer", "description": "清单化容器数" },
+          "dedupCrossObjects": { "type": "integer", "description": "被引用对象数" },
+          "dedupCrossBytes": { "type": "integer", "format": "int64", "description": "对象实际占用的去重后字节" },
+          "dedupCrossImpliedBytes": { "type": "integer", "format": "int64", "description": "若无跨文件去重时需存的字节" },
+          "dedupCrossSavedBytes": { "type": "integer", "format": "int64", "description": "去重节省字节" },
+          "dedupCrossRatio": { "type": "number", "description": "去重收益比值（>1 表示有收益）" }
         }
       }
     },

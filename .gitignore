@@ -1,7 +1,8 @@
 node_modules/
 web/dist/
 data/
+data-dev/
 data-test/
-docs/DEVELOPMENT.md
+data-e2e/
 .env
 *.log
