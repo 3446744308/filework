@@ -135,9 +135,32 @@ body {
   gap: 6px;
 }
 
-.menu-more-arrow {
-  font-size: 10px;
-  color: #8c8c8c;
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-arrow {
+  display: block;
+}
+
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-title {
+  padding-inline-end: 34px;
+}
+
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-arrow::before {
+  transform: rotate(-45deg) translateX(2.5px);
+}
+
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-arrow::after {
+  transform: rotate(45deg) translateX(-2.5px);
+}
+
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-open > .ant-menu-submenu-title > .ant-menu-submenu-arrow {
+  transform: translateY(-2px);
+}
+
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-open > .ant-menu-submenu-title > .ant-menu-submenu-arrow::before {
+  transform: rotate(45deg) translateX(2.5px);
+}
+
+.site-header-menu.ant-menu-horizontal .ant-menu-submenu-open > .ant-menu-submenu-title > .ant-menu-submenu-arrow::after {
+  transform: rotate(-45deg) translateX(-2.5px);
 }
 
 .site-header-menu {

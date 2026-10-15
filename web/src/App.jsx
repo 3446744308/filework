@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Button, Drawer, Layout, Menu, Typography } from 'antd'
 import {
-  DownOutlined,
   DownloadOutlined,
   InfoCircleOutlined,
   MenuOutlined,
@@ -48,7 +47,6 @@ const items = [
       <span className="menu-item-label">
         <MoreOutlined />
         其他
-        <DownOutlined className="menu-more-arrow" />
       </span>
     ),
     children: [
