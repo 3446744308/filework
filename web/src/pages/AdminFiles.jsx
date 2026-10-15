@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { App as AntApp, Button, Card, Input, Popconfirm, Progress, Space, Table, Typography } from 'antd'
+import { App as AntApp, Button, Card, Input, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from 'antd'
 import {
+  ClearOutlined,
   CopyOutlined,
   DeleteOutlined,
   ReloadOutlined,
@@ -17,6 +18,7 @@ export default function AdminFiles() {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(false)
   const [keyword, setKeyword] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [selectedKeys, setSelectedKeys] = useState([])
 
   const handleAuthError = (err) => {
@@ -77,16 +79,33 @@ export default function AdminFiles() {
     loadList()
   }
 
+  const clearInvalid = async () => {
+    try {
+      const data = await api.adminClearExpired(getAdminKey())
+      message.success(`已清空 ${data.removed} 条已失效记录`)
+      setSelectedKeys([])
+      loadList()
+    } catch (err) {
+      handleAuthError(err)
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase()
-    if (!q) return list
-    return list.filter(
-      (item) =>
+    return list.filter((item) => {
+      if (statusFilter === 'active' && item.status !== 'active') return false
+      if (statusFilter === 'invalid' && item.status === 'active') return false
+      if (!q) return true
+      return (
         item.code.includes(q) ||
         item.filename.toLowerCase().includes(q) ||
         (item.note || '').toLowerCase().includes(q)
-    )
-  }, [list, keyword])
+      )
+    })
+  }, [list, keyword, statusFilter])
+
+  const invalidCount = list.filter((item) => item.status !== 'active').length
+  const activeCount = list.length - invalidCount
 
   const columns = [
     {
@@ -107,6 +126,17 @@ export default function AdminFiles() {
           />
         </Space>
       )
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 92,
+      render: (status) =>
+        status === 'active' ? (
+          <Tag color="success">生效中</Tag>
+        ) : (
+          <Tag color="default">已失效</Tag>
+        )
     },
     {
       title: '文件名',
@@ -153,11 +183,15 @@ export default function AdminFiles() {
       title: '有效期至',
       dataIndex: 'expiresAt',
       width: 170,
-      render: (ts) => (
+      render: (ts, row) => (
         <div>
           <div>{formatTime(ts)}</div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            剩余 {timeLeft(ts)}
+            {row.status === 'active'
+              ? `剩余 ${timeLeft(ts)}`
+              : row.status === 'expired'
+                ? '已过期'
+                : '次数用尽'}
           </Typography.Text>
         </div>
       )
@@ -174,7 +208,14 @@ export default function AdminFiles() {
       key: 'action',
       width: 90,
       render: (_, row) => (
-        <Popconfirm title={`销毁 ${row.code}？`} onConfirm={() => remove(row.code)}>
+        <Popconfirm
+          title={
+            row.status === 'active'
+              ? `销毁 ${row.code}？文件与记录将被删除`
+              : `删除记录 ${row.code}？`
+          }
+          onConfirm={() => remove(row.code)}
+        >
           <Button size="small" danger icon={<DeleteOutlined />}>
             删除
           </Button>
@@ -190,10 +231,20 @@ export default function AdminFiles() {
           <Typography.Title level={4} style={{ margin: 0 }}>
             文件管理
             <Typography.Text type="secondary" style={{ fontSize: 14, marginLeft: 8, fontWeight: 400 }}>
-              共 {filtered.length} 个
+              共 {filtered.length} 条 · 生效中 {activeCount} 条
             </Typography.Text>
           </Typography.Title>
           <Space wrap>
+            <Select
+              value={statusFilter}
+              onChange={setStatusFilter}
+              style={{ width: 120 }}
+              options={[
+                { value: 'all', label: '全部状态' },
+                { value: 'active', label: '生效中' },
+                { value: 'invalid', label: '已失效' }
+              ]}
+            />
             <Input
               placeholder="取件码 / 文件名 / 备注"
               allowClear
@@ -209,6 +260,17 @@ export default function AdminFiles() {
               >
                 <Button danger icon={<DeleteOutlined />}>
                   删除选中 {selectedKeys.length}
+                </Button>
+              </Popconfirm>
+            )}
+            {invalidCount > 0 && (
+              <Popconfirm
+                title={`清空 ${invalidCount} 条已失效记录？`}
+                description="仅删除失效记录，生效中的分享不受影响"
+                onConfirm={clearInvalid}
+              >
+                <Button danger icon={<ClearOutlined />}>
+                  清空已失效
                 </Button>
               </Popconfirm>
             )}
@@ -233,7 +295,7 @@ export default function AdminFiles() {
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`
           }}
-          locale={{ emptyText: keyword ? '无匹配分享' : '暂无有效分享' }}
+          locale={{ emptyText: keyword || statusFilter !== 'all' ? '无匹配记录' : '暂无寄件记录' }}
           size="middle"
         />
       </Card>

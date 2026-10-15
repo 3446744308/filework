@@ -352,6 +352,7 @@
                 "schema": { "$ref": "#/components/schemas/UploadResult" },
                 "example": {
                   "code": "832451",
+                  "status": "active",
                   "filename": "报告.pdf",
                   "size": 1048576,
                   "mime": "application/pdf",
@@ -404,6 +405,7 @@
                 "schema": { "$ref": "#/components/schemas/ShareInfo" },
                 "example": {
                   "code": "832451",
+                  "status": "active",
                   "filename": "报告.pdf",
                   "size": 1048576,
                   "mime": "application/pdf",
@@ -463,7 +465,7 @@
       "get": {
         "tags": ["取件"],
         "summary": "下载文件",
-        "description": "成功返回文件流并消耗 1 次次数；次数耗尽或过期后取件码立即失效。设密分享需带 password，错误/缺失返回 403。",
+        "description": "成功返回文件流并消耗 1 次次数；次数耗尽或过期后取件码失效（文件销毁，记录留存为已失效）。设密分享需带 password，错误/缺失返回 403。",
         "operationId": "downloadFile",
         "parameters": [
           {
@@ -554,8 +556,8 @@
     "/api/admin/list": {
       "get": {
         "tags": ["管理"],
-        "summary": "有效分享列表",
-        "description": "返回当前所有有效分享（publicInfo 结构），不含 password 与 clientIp。",
+        "summary": "分享列表",
+        "description": "返回全部分享记录（publicInfo 结构，含 status），**包含已失效**（expired / exhausted，文件已销毁、记录留存），按 createdAt 倒序；不含 password 与 clientIp。",
         "operationId": "adminList",
         "security": [{ "AdminKey": [] }],
         "responses": {
@@ -579,11 +581,37 @@
         }
       }
     },
+    "/api/admin/expired": {
+      "delete": {
+        "tags": ["管理"],
+        "summary": "清空已失效记录",
+        "description": "彻底删除全部已失效记录（expired / exhausted 的元数据与残留文件），生效中的分享不受影响。与自然失效区别：自然失效只销毁文件、记录留存；本接口连记录一并删除。",
+        "operationId": "adminClearExpired",
+        "security": [{ "AdminKey": [] }],
+        "responses": {
+          "200": {
+            "description": "清空成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "removed": { "type": "integer", "description": "删除的失效记录条数", "example": 3 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
     "/api/admin/{code}": {
       "delete": {
         "tags": ["管理"],
         "summary": "删除指定分享",
-        "description": "物理删除元数据与文件，取件码立即失效。",
+        "description": "彻底删除该条记录与文件（对生效中的分享为销毁，对已失效记录为清除记录），取件码立即失效。",
         "operationId": "adminDelete",
         "security": [{ "AdminKey": [] }],
         "parameters": [
@@ -798,6 +826,11 @@
         "description": "分享公开信息（publicInfo）。不含密码哈希与 clientIp。",
         "properties": {
           "code": { "type": "string", "pattern": "^\\d{6}$", "description": "6 位取件码" },
+          "status": {
+            "type": "string",
+            "enum": ["active", "expired", "exhausted"],
+            "description": "分享状态：生效中 / 已过期 / 次数用尽；仅管理列表会出现非 active 值"
+          },
           "filename": { "type": "string", "description": "文件名" },
           "size": { "type": "integer", "format": "int64", "description": "文件大小（字节）" },
           "mime": { "type": "string", "description": "MIME 类型" },

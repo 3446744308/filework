@@ -30,6 +30,12 @@ export function removeShare(code) {
   }
 }
 
+export function dropFile(code) {
+  try {
+    fs.unlinkSync(filePath(code))
+  } catch {}
+}
+
 export function generateCode() {
   for (let i = 0; i < 50; i++) {
     const code = String(crypto.randomInt(100000, 1000000))
@@ -94,20 +100,23 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(bufA, bufB)
 }
 
+export function shareStatus(meta) {
+  if (Date.now() > meta.expiresAt) return 'expired'
+  if (meta.downloads >= meta.maxDownloads) return 'exhausted'
+  return 'active'
+}
+
 export function isActive(meta) {
-  return Date.now() <= meta.expiresAt && meta.downloads < meta.maxDownloads
+  return shareStatus(meta) === 'active'
 }
 
 export function getActive(code) {
   const meta = readMeta(code)
   if (!meta) return { ok: false, reason: 'not_found' }
-  if (Date.now() > meta.expiresAt) {
-    removeShare(code)
-    return { ok: false, reason: 'expired' }
-  }
-  if (meta.downloads >= meta.maxDownloads) {
-    removeShare(code)
-    return { ok: false, reason: 'exhausted' }
+  const status = shareStatus(meta)
+  if (status !== 'active') {
+    dropFile(code)
+    return { ok: false, reason: status }
   }
   return { ok: true, meta }
 }
@@ -139,13 +148,37 @@ export function listAll() {
     if (!name.endsWith('.json')) continue
     const code = name.slice(0, -5)
     const meta = readMeta(code)
-    if (meta && isActive(meta)) result.push(meta)
+    if (meta) result.push(meta)
   }
   result.sort((a, b) => b.createdAt - a.createdAt)
   return result
 }
 
 export function cleanupExpired() {
+  let cleaned = 0
+  let names = []
+  try {
+    names = fs.readdirSync(config.metaDir)
+  } catch {
+    return cleaned
+  }
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const code = name.slice(0, -5)
+    const meta = readMeta(code)
+    if (!meta) {
+      removeShare(code)
+      continue
+    }
+    if (!isActive(meta)) {
+      dropFile(code)
+      cleaned++
+    }
+  }
+  return cleaned
+}
+
+export function clearInvalid() {
   let removed = 0
   let names = []
   try {
@@ -182,6 +215,7 @@ export function clearTmp() {
 export function publicInfo(meta) {
   return {
     code: meta.code,
+    status: shareStatus(meta),
     filename: meta.filename,
     size: meta.size,
     mime: meta.mime,

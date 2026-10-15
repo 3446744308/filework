@@ -180,6 +180,7 @@ Content-Type: multipart/form-data
 ```json
 {
   "code": "832451",
+  "status": "active",
   "filename": "报告.pdf",
   "size": 1048576,
   "mime": "application/pdf",
@@ -196,6 +197,7 @@ Content-Type: multipart/form-data
 | 字段 | 说明 |
 |---|---|
 | `code` | 6 位取件码，App 应引导用户分享此码或 `/d/<code>` 链接 |
+| `status` | 分享状态：`active` 生效中 / `expired` 已过期 / `exhausted` 次数用尽；新上传恒为 `active` |
 | `hasPassword` | 是否设有取件密码（布尔，不含密码本身） |
 | `clientIp` | 仅上传响应回传，`/api/info` 不返回；可选展示 |
 | `createdAt` / `expiresAt` | Unix 毫秒时间戳 |
@@ -232,6 +234,7 @@ GET /api/info?code=832451
 ```json
 {
   "code": "832451",
+  "status": "active",
   "filename": "报告.pdf",
   "size": 1048576,
   "mime": "application/pdf",
@@ -244,7 +247,7 @@ GET /api/info?code=832451
 }
 ```
 
-> 不含 `clientIp`，不含 `password` 哈希。
+> 不含 `clientIp`，不含 `password` 哈希。已失效（过期/次数耗尽）的记录本接口返回 `404`，`status` 字段仅在管理接口中可能出现非 `active` 值。
 
 **错误**：`400` 格式不对 / `404` 不存在或已失效 / `429` 失败次数超限。
 
@@ -291,7 +294,7 @@ GET /api/download?code=832451&password=secret123
 - `Content-Disposition`：`attachment; filename=...`（文件名按 UTF-8 编码）
 - Body：文件二进制流
 
-**每次成功下载消耗 1 次次数**，次数耗尽或过期后码立即失效。
+**每次成功下载消耗 1 次次数**，次数耗尽或过期后取件码失效（文件销毁，记录留存为已失效）。
 
 **错误**：`400` / `403` 密码错误 / `404` 不存在、已失效或次数耗尽 / `429` 限流 / `500` 下载失败。
 
@@ -424,6 +427,7 @@ GET /api/admin/list
   "list": [
     {
       "code": "832451",
+      "status": "active",
       "filename": "报告.pdf",
       "size": 1048576,
       "mime": "application/pdf",
@@ -438,18 +442,25 @@ GET /api/admin/list
 }
 ```
 
-> 列表项使用与 `/api/info` 相同的 `publicInfo` 结构，不含 `password` 与 `clientIp`。
+> 列表项使用与 `/api/info` 相同的 `publicInfo` 结构（含 `status`），不含 `password` 与 `clientIp`。**返回全部记录，包含已失效**（`status` 为 `expired` / `exhausted`），按 `createdAt` 倒序；失效记录的文件体已销毁，仅元数据留存。
 
 ---
 
-### 3.4 删除分享
+### 3.4 删除分享 / 清空已失效记录
 
 ```
 DELETE /api/admin/832451
 ```
 
 **响应 200**：`{ "ok": true }`  
-物理删除元数据与文件，取件码立即失效。
+彻底删除该条记录与文件（含已失效记录），取件码立即失效。注意与自然失效的区别：自然失效（过期/次数耗尽）只销毁文件、记录留存为已失效。
+
+```
+DELETE /api/admin/expired
+```
+
+**响应 200**：`{ "ok": true, "removed": 3 }`  
+彻底清空全部已失效记录（`expired` 与 `exhausted`），生效中的分享不受影响。`removed` 为删除的记录条数。
 
 ---
 
@@ -638,8 +649,9 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 | GET | `/api/download` | 公开 | 下载文件（消耗次数） |
 | GET | `/api/admin/ping` | admin | 验证管理密钥 |
 | GET | `/api/admin/stats` | admin | 统计概览 |
-| GET | `/api/admin/list` | admin | 有效分享列表 |
-| DELETE | `/api/admin/:code` | admin | 删除指定分享 |
+| GET | `/api/admin/list` | admin | 分享列表（含已失效，含 status） |
+| DELETE | `/api/admin/expired` | admin | 清空全部已失效记录（彻底删除） |
+| DELETE | `/api/admin/:code` | admin | 删除指定分享（彻底删除记录与文件） |
 
 \* 上传接口受每 IP 每分钟频率限制，但无需管理密钥。
 
@@ -669,11 +681,14 @@ curl -X POST http://localhost:3000/api/verify-password \
 # 下载（设密）
 curl -o report.pdf "http://localhost:3000/api/download?code=832451&password=secret123"
 
-# 管理：列出所有分享
+# 管理：列出所有分享（含已失效）
 curl -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/list
 
-# 管理：删除分享
+# 管理：删除分享（彻底删除记录与文件）
 curl -X DELETE -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/832451
+
+# 管理：清空全部已失效记录
+curl -X DELETE -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/expired
 ```
 
 ---
@@ -683,6 +698,6 @@ curl -X DELETE -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/832451
 1. **HTTPS**：生产环境务必通过 Nginx / Caddy 等反向代理启用 HTTPS，避免密码与文件在传输中被窃听。
 2. **密码安全**：`password` 仅在上传时以明文通过表单发送一次，服务端立即哈希；之后所有接口只暴露 `hasPassword` 布尔，永不回传哈希或明文。
 3. **下载消耗次数**：每次成功返回 200 文件流即消耗 1 次；App 应在下载**成功后**再更新 UI 的剩余次数，失败（网络中断等）不消耗。
-4. **失效即时销毁**：过期或次数耗尽后，服务端会物理删除文件与元数据，之后所有请求均 404，无法找回。
+4. **失效后文件销毁、记录留存**：过期或次数耗尽后，服务端销毁文件体（取件请求一律 404），但元数据记录会留存并标记为已失效（`expired` / `exhausted`），仅管理接口可见；管理员可「清空已失效」彻底删除这些记录。
 5. **自定义码冲突**：收到 409 时，App 可提示用户换码，或不传 `customCode` 让系统随机生成。
 6. **时区**：所有时间戳为 UTC 毫秒，前端/App 用本地时区格式化即可。

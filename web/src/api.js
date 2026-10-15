@@ -166,5 +166,11 @@ export const api = {
       method: 'DELETE',
       headers: { 'x-admin-key': key }
     })
+  },
+  async adminClearExpired(key) {
+    return request('/api/admin/expired', {
+      method: 'DELETE',
+      headers: { 'x-admin-key': key }
+    })
   }
 }

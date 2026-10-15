@@ -145,6 +145,14 @@ async function run() {
   const info3 = await req(`/api/info?code=${code1}`)
   assert(info3.res.status === 404 && info3.body.error.includes('取走'), '次数耗尽后码失效', JSON.stringify(info3.body))
 
+  const metaAfterExhaust = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'meta', `${code1}.json`), 'utf8'))
+  assert(metaAfterExhaust.downloads === 3, '次数耗尽后记录留存', JSON.stringify(metaAfterExhaust))
+  assert(
+    !fs.existsSync(path.join(DATA_DIR, 'files', code1)),
+    '次数耗尽后文件已销毁',
+    path.join(DATA_DIR, 'files', code1)
+  )
+
   const dlAfter = await fetch(`${BASE}/api/download?code=${code1}`)
   assert(dlAfter.status === 404, '次数耗尽后下载返回 404', `实际 ${dlAfter.status}`)
 
@@ -157,7 +165,7 @@ async function run() {
   fs.writeFileSync(metaFile, JSON.stringify(meta))
   const infoExpired = await req(`/api/info?code=${code2}`)
   assert(infoExpired.res.status === 404 && infoExpired.body.error.includes('过期'), '过期分享返回 404', JSON.stringify(infoExpired.body))
-  assert(!fs.existsSync(metaFile), '过期分享元数据已删除')
+  assert(fs.existsSync(metaFile), '过期分享记录留存')
   assert(!fs.existsSync(path.join(DATA_DIR, 'files', code2)), '过期分享文件已删除')
 
   console.log('\n[4] 文件大小限制')
@@ -184,6 +192,13 @@ async function run() {
   assert(del.res.status === 200 && del.body.ok === true, '管理员删除成功')
   const infoDeleted = await req(`/api/info?code=${code3}`)
   assert(infoDeleted.res.status === 404, '删除后取件码失效', `实际 ${infoDeleted.res.status}`)
+  const listAfterDel = await req('/api/admin/list', { headers: { 'x-admin-key': ADMIN_KEY } })
+  assert(
+    !listAfterDel.body.list.some((i) => i.code === code3),
+    '手动删除后记录彻底移除',
+    code3
+  )
+  assert(!fs.existsSync(path.join(DATA_DIR, 'meta', `${code3}.json`)), '手动删除后元数据文件已删除')
 
   console.log('\n[6] 公告配置')
   const n0 = await req('/api/notice')
@@ -310,17 +325,6 @@ async function run() {
       })
     }
   }
-
-  console.log('\n[8] 失败限流')
-  let limited = false
-  for (let i = 0; i < 10; i++) {
-    const r = await req('/api/info?code=000000')
-    if (r.res.status === 429) {
-      limited = true
-      break
-    }
-  }
-  assert(limited, '连续失败触发 429 限流')
 
   console.log('\n[9] 静态页面（需已执行 npm run build）')
   const hasDist = fs.existsSync(path.join(rootDir, 'web', 'dist', 'index.html'))
@@ -708,6 +712,45 @@ async function run() {
     body: JSON.stringify({ displayMode: 'simple' })
   })
 
+  console.log('\n[15] 失效记录留存与清空')
+  const up15 = await upload('keep record', { expiresIn: '1', maxDownloads: '1' })
+  const code15 = up15.body.code
+  const info15Warm = await req(`/api/info?code=${code15}`)
+  assert(info15Warm.res.status === 200, '失效前 info 查询成功（并清零失败限流桶）', `实际 ${info15Warm.res.status}`)
+  const meta15Path = path.join(DATA_DIR, 'meta', `${code15}.json`)
+  const m15 = JSON.parse(fs.readFileSync(meta15Path, 'utf8'))
+  m15.expiresAt = Date.now() - 1000
+  fs.writeFileSync(meta15Path, JSON.stringify(m15))
+  const info15 = await req(`/api/info?code=${code15}`)
+  assert(info15.res.status === 404 && info15.body.error.includes('过期'), '过期后 info 返回 404', JSON.stringify(info15.body))
+  assert(fs.existsSync(meta15Path), '过期后记录仍留存')
+  assert(!fs.existsSync(path.join(DATA_DIR, 'files', code15)), '过期后文件已销毁')
+
+  const clearNoKey = await req('/api/admin/expired', { method: 'DELETE' })
+  assert(clearNoKey.res.status === 401, '无密钥清空已失效返回 401', `实际 ${clearNoKey.res.status}`)
+
+  const list15 = await req('/api/admin/list', { headers: { 'x-admin-key': ADMIN_KEY } })
+  const row15 = list15.body.list.find((i) => i.code === code15)
+  assert(row15 && row15.status === 'expired', '管理列表中过期记录状态为已失效', JSON.stringify(row15))
+  const rowExhausted = list15.body.list.find((i) => i.code === code1)
+  assert(rowExhausted && rowExhausted.status === 'exhausted', '管理列表中耗尽记录状态为已失效', JSON.stringify(rowExhausted))
+
+  const up15b = await upload('still active file', { expiresIn: '24', maxDownloads: '3' })
+  const code15b = up15b.body.code
+  const clear15 = await req('/api/admin/expired', { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } })
+  assert(clear15.res.status === 200 && clear15.body.removed >= 1, '清空已失效记录', JSON.stringify(clear15.body))
+  assert(!fs.existsSync(meta15Path), '清空后失效记录元数据已删除')
+
+  const list15b = await req('/api/admin/list', { headers: { 'x-admin-key': ADMIN_KEY } })
+  assert(!list15b.body.list.some((i) => i.code === code15), '清空后列表不含已失效记录')
+  assert(
+    list15b.body.list.some((i) => i.code === code15b && i.status === 'active'),
+    '清空不影响生效中记录',
+    JSON.stringify(list15b.body.list)
+  )
+
+  await req(`/api/admin/${code15b}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } })
+
   console.log('\n[16] 公网 IP 查询')
   const ipRes = await req('/api/ip')
   assert(
@@ -900,6 +943,17 @@ async function run() {
   assert(fbDelGone.res.status === 404, '已删除反馈更新状态返回 404', `实际 ${fbDelGone.res.status}`)
   const fbQueryGone = await req(`/api/feedback/query?code=${fb1.body.code}`)
   assert(fbQueryGone.res.status === 404, '删除后凭反馈号查询返回 404', `实际 ${fbQueryGone.res.status}`)
+
+  console.log('\n[18] 失败限流')
+  let limited = false
+  for (let i = 0; i < 10; i++) {
+    const r = await req('/api/info?code=000000')
+    if (r.res.status === 429) {
+      limited = true
+      break
+    }
+  }
+  assert(limited, '连续失败触发 429 限流')
 
   console.log(`\n结果: ${passed} 通过, ${failed} 失败`)
   server.kill('SIGTERM')

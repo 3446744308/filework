@@ -12,6 +12,8 @@ import {
   listAll,
   removeShare,
   clearTmp,
+  clearInvalid,
+  isActive,
   publicInfo,
   verifyPassword
 } from './store.js'
@@ -365,15 +367,19 @@ app.get('/api/admin/list', adminAuth, (req, res) => {
 })
 
 app.get('/api/admin/stats', adminAuth, (req, res) => {
-  const list = listAll()
+  const active = listAll().filter(isActive)
   const counters = readCounters()
   res.json({
-    fileCount: list.length,
-    totalSize: list.reduce((sum, meta) => sum + meta.size, 0),
-    activeDownloads: list.reduce((sum, meta) => sum + meta.downloads, 0),
+    fileCount: active.length,
+    totalSize: active.reduce((sum, meta) => sum + meta.size, 0),
+    activeDownloads: active.reduce((sum, meta) => sum + meta.downloads, 0),
     totalUploads: counters.totalUploads,
     totalDownloads: counters.totalDownloads
   })
+})
+
+app.delete('/api/admin/expired', adminAuth, (req, res) => {
+  res.json({ ok: true, removed: clearInvalid() })
 })
 
 app.delete('/api/admin/:code', adminAuth, (req, res) => {
