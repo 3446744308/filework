@@ -59,7 +59,7 @@ GET /api/health
   "features": [
     "siteSettings", "maxFileSize", "blockedExts",
     "noticeDisplay", "displayMode", "waybill",
-    "publicIp", "customCode", "password", "beian", "gongan", "feedback"
+    "publicIp", "customCode", "password", "beian", "gongan", "feedback", "preview"
   ]
 }
 ```
@@ -307,7 +307,39 @@ GET /api/download?code=832451&password=secret123
 
 ---
 
-### 2.10 提交意见反馈
+### 2.10 在线预览文件
+
+```
+GET /api/preview?code=832451
+GET /api/preview?code=832451&password=secret123
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `code` | 是 | 6 位取件码 |
+| `password` | 设密时是 | 取件密码；缺失或错误返回 403 |
+
+支持预览的类型（前后端共用同一判定逻辑 `shared/preview.js`）：
+
+- **图片**：`image/*`（含 svg）
+- **视频**：`video/*`
+- **文本**：`text/*`、常见 JSON/XML/YAML MIME，或扩展名命中文本清单（txt/md/json/log/csv/js/ts/py/sh 等）；文本类超过 **10MB** 不可预览
+
+**响应 200**
+
+- `Content-Type`：文件 MIME（文本统一补 `charset=utf-8`）
+- `Content-Disposition`：`inline; filename=...`（文件名按 UTF-8 编码）
+- Body：文件二进制流
+
+**每次成功预览同样消耗 1 次下载次数**，与下载共用同一计数；不支持的类型返回 `400` 且**不消耗**次数。
+
+**App 实现建议**：一次请求拉取完整内容（如 Android 的 `Response.body().bytes()` / iOS 的 `URLSession.dataTask`），不要用分段 Range 请求播放视频，否则每次 Range 都会消耗次数。建议在触发预览前弹窗告知用户「预览将消耗 1 次次数」。
+
+**错误**：`400` 码格式错误 / 类型不支持预览 / `403` 密码错误 / `404` 不存在、已失效或次数耗尽 / `429` 限流 / `500` 预览失败。
+
+---
+
+### 2.11 提交意见反馈
 
 ```
 POST /api/feedback
@@ -335,7 +367,7 @@ Body：
 
 ---
 
-### 2.11 查询反馈进度
+### 2.12 查询反馈进度
 
 ```
 GET /api/feedback/query?code=FB-24815302
@@ -590,7 +622,7 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 
 | 维度 | 默认阈值 | 触发后 |
 |---|---|---|
-| 取件相关失败（`/api/info`、`/api/verify-password`、`/api/download` 的 4xx） | 每 IP 每分钟 `RATE_LIMIT_MISSES` 次（默认 10） | 返回 429，窗口 60s |
+| 取件相关失败（`/api/info`、`/api/verify-password`、`/api/download`、`/api/preview` 的 4xx） | 每 IP 每分钟 `RATE_LIMIT_MISSES` 次（默认 10） | 返回 429，窗口 60s |
 | 上传频率（`/api/upload`） | 每 IP 每分钟 `UPLOAD_LIMIT_PER_MINUTE` 次（默认 10） | 返回 429 |
 
 **成功请求会重置该 IP 的失败计数**。App 收到 429 时应提示用户稍后再试，而非无限重试。
@@ -647,6 +679,7 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 | GET | `/api/info` | 公开 | 查询分享信息 |
 | POST | `/api/verify-password` | 公开 | 验证取件密码 |
 | GET | `/api/download` | 公开 | 下载文件（消耗次数） |
+| GET | `/api/preview` | 公开 | 在线预览文件（消耗次数，仅图片/视频/文本） |
 | GET | `/api/admin/ping` | admin | 验证管理密钥 |
 | GET | `/api/admin/stats` | admin | 统计概览 |
 | GET | `/api/admin/list` | admin | 分享列表（含已失效，含 status） |
@@ -681,6 +714,9 @@ curl -X POST http://localhost:3000/api/verify-password \
 # 下载（设密）
 curl -o report.pdf "http://localhost:3000/api/download?code=832451&password=secret123"
 
+# 预览（消耗次数）
+curl "http://localhost:3000/api/preview?code=832451" -o preview.bin
+
 # 管理：列出所有分享（含已失效）
 curl -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/list
 
@@ -697,7 +733,7 @@ curl -X DELETE -H "x-admin-key: YOUR_KEY" http://localhost:3000/api/admin/expire
 
 1. **HTTPS**：生产环境务必通过 Nginx / Caddy 等反向代理启用 HTTPS，避免密码与文件在传输中被窃听。
 2. **密码安全**：`password` 仅在上传时以明文通过表单发送一次，服务端立即哈希；之后所有接口只暴露 `hasPassword` 布尔，永不回传哈希或明文。
-3. **下载消耗次数**：每次成功返回 200 文件流即消耗 1 次；App 应在下载**成功后**再更新 UI 的剩余次数，失败（网络中断等）不消耗。
+3. **下载/预览消耗次数**：每次成功返回 200 即消耗 1 次（下载与预览共用同一计数）；App 应在成功**后**再更新 UI 的剩余次数，失败（网络中断等）不消耗。预览不支持的类型返回 400，不消耗次数。
 4. **失效后文件销毁、记录留存**：过期或次数耗尽后，服务端销毁文件体（取件请求一律 404），但元数据记录会留存并标记为已失效（`expired` / `exhausted`），仅管理接口可见；管理员可「清空已失效」彻底删除这些记录。
 5. **自定义码冲突**：收到 409 时，App 可提示用户换码，或不传 `customCode` 让系统随机生成。
 6. **时区**：所有时间戳为 UTC 毫秒，前端/App 用本地时区格式化即可。

@@ -39,7 +39,7 @@
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
                 "example": {
                   "ok": true,
-                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan", "feedback"]
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan", "feedback", "preview"]
                 }
               }
             }
@@ -498,6 +498,59 @@
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": {
             "description": "下载失败",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/preview": {
+      "get": {
+        "tags": ["取件"],
+        "summary": "在线预览文件",
+        "description": "支持图片（image/*）、视频（video/*）、文本（text/* 与常见文本 MIME/扩展名，文本类 >10MB 不可预览）；成功返回文件流并同样消耗 1 次次数（与下载共用计数）；不支持的类型返回 400 且不消耗次数。Content-Disposition: inline。设密分享需带 password。",
+        "operationId": "previewFile",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "description": "6 位数字取件码",
+            "schema": { "type": "string", "pattern": "^\\d{6}$", "example": "832451" }
+          },
+          {
+            "name": "password",
+            "in": "query",
+            "required": false,
+            "description": "取件密码（分享设有密码时必填）",
+            "schema": { "type": "string", "maxLength": 64 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文件流。Content-Type 为文件 MIME（文本补 charset=utf-8）；Content-Disposition: inline; filename=...（UTF-8 编码）",
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "400": {
+            "description": "取件码格式错误，或该文件类型不支持预览（不消耗次数）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": {
+            "description": "预览失败",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Error" }

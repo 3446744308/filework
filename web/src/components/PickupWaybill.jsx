@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Input, Space } from 'antd'
-import { DownloadOutlined, InboxOutlined } from '@ant-design/icons'
+import { DownloadOutlined, EyeOutlined, InboxOutlined } from '@ant-design/icons'
 import { api } from '../api.js'
 import { formatBytes, formatDateTimeTz, timeLeft, waybillNoOf } from '../utils.js'
 import { QrCode, Barcode, FEATURES } from './WaybillParts.jsx'
@@ -14,6 +14,9 @@ export default function PickupWaybill({
   password,
   onPasswordChange,
   onDownload,
+  previewKind,
+  previewing,
+  onPreview,
   onChangeCode
 }) {
   const waybillNo = waybillNoOf(info.createdAt, info.code)
@@ -91,15 +94,21 @@ export default function PickupWaybill({
                 />
               </div>
             )}
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              loading={downloading}
-              onClick={onDownload}
-              className="waybill-col-download"
-            >
-              {info.hasPassword ? '验证密码并下载' : '下载文件'}
-            </Button>
+            <div className="waybill-col-actions">
+              <Button
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={downloading}
+                onClick={onDownload}
+              >
+                {info.hasPassword ? '验证密码并下载' : '下载文件'}
+              </Button>
+              {previewKind && (
+                <Button icon={<EyeOutlined />} loading={previewing} onClick={onPreview}>
+                  预览
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="waybill-col">

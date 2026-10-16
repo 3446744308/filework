@@ -64,6 +64,21 @@ export const api = {
     if (password) params.set('password', password)
     return `/api/download?${params}`
   },
+  async preview(code, password = '') {
+    const params = new URLSearchParams({ code })
+    if (password) params.set('password', password)
+    const res = await fetch(`/api/preview?${params}`)
+    if (!res.ok) {
+      let data = null
+      try {
+        data = await res.json()
+      } catch {}
+      const err = new Error((data && data.error) || `预览失败（${res.status}）`)
+      err.status = res.status
+      throw err
+    }
+    return res.blob()
+  },
   notice() {
     return request('/api/notice')
   },

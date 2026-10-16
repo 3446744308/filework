@@ -19,6 +19,7 @@ import {
 } from './store.js'
 import { startCleanup } from './cleanup.js'
 import { missGuard, rateGuard } from './rate-limit.js'
+import { isPreviewable, previewKind } from '../shared/preview.js'
 import {
   createFeedback,
   listFeedback,
@@ -102,7 +103,8 @@ app.get('/api/health', (req, res) =>
       'password',
       'beian',
       'gongan',
-      'feedback'
+      'feedback',
+      'preview'
     ]
   })
 )
@@ -357,6 +359,38 @@ app.get('/api/download', missGuard(config.rateLimitMisses), (req, res) => {
   }
   res.download(target, result.meta.filename, (err) => {
     if (err && !res.headersSent) fail(res, 500, '下载失败，请重试')
+  })
+})
+
+app.get('/api/preview', missGuard(config.rateLimitMisses), (req, res) => {
+  const code = parseCode(req.query.code)
+  if (!code) return fail(res, 400, '取件码格式不正确')
+  const found = getActive(code)
+  if (!found.ok) return fail(res, 404, reasonMessage(found.reason))
+  if (found.meta.password) {
+    const password = String(req.query.password ?? '')
+    if (!password || !verifyPassword(found.meta, password)) {
+      return fail(res, 403, '取件密码错误')
+    }
+  }
+  if (!isPreviewable(found.meta.mime, found.meta.filename, found.meta.size)) {
+    return fail(res, 400, '该文件类型不支持预览，仅支持图片、视频与文本')
+  }
+  const result = tryConsume(code)
+  if (!result.ok) return fail(res, 404, reasonMessage(result.reason))
+  const target = getFileStreamPath(code)
+  if (!fs.existsSync(target)) {
+    removeShare(code)
+    return fail(res, 404, '文件已不存在')
+  }
+  const kind = previewKind(result.meta.mime, result.meta.filename, result.meta.size)
+  let type = result.meta.mime || 'application/octet-stream'
+  if (kind === 'text' && !type.startsWith('text/')) type = 'text/plain; charset=utf-8'
+  else if (type.startsWith('text/') && !type.includes('charset')) type += '; charset=utf-8'
+  res.setHeader('Content-Type', type)
+  res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(result.meta.filename)}`)
+  res.sendFile(target, (err) => {
+    if (err && !res.headersSent) fail(res, 500, '预览失败，请重试')
   })
 })
 

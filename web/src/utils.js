@@ -1,5 +1,7 @@
 import dayjs from 'dayjs'
 
+export { previewKind } from '../../shared/preview.js'
+
 export function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return '-'
   if (bytes < 1024) return `${bytes} B`

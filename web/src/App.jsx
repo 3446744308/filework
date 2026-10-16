@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Button, Drawer, Layout, Menu, Typography } from 'antd'
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Button, Card, Drawer, Layout, Menu, Result, Typography } from 'antd'
 import {
   DownloadOutlined,
+  HistoryOutlined,
   InfoCircleOutlined,
   MenuOutlined,
   MessageOutlined,
@@ -19,6 +20,7 @@ import AdminFeedback from './pages/AdminFeedback.jsx'
 import About from './pages/About.jsx'
 import Feedback from './pages/Feedback.jsx'
 import FeedbackQuery from './pages/FeedbackQuery.jsx'
+import Changelog from './pages/Changelog.jsx'
 import NoticeBar from './components/NoticeBar.jsx'
 import { useSettings, logoUrlOf } from './hooks/useSettings.js'
 
@@ -76,6 +78,15 @@ const items = [
             查询反馈
           </Link>
         )
+      },
+      {
+        key: '/changelog',
+        label: (
+          <Link to="/changelog" className="menu-item-label">
+            <HistoryOutlined />
+            更新日志
+          </Link>
+        )
       }
     ]
   }
@@ -97,6 +108,7 @@ function matchSelected(pathname) {
 
 export default function App() {
   const location = useLocation()
+  const navigate = useNavigate()
   const settings = useSettings()
   const isAdmin = location.pathname.startsWith('/admin')
   const selected = matchSelected(location.pathname)
@@ -167,6 +179,7 @@ export default function App() {
         <Route path="/about" element={<About />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/feedback-query" element={<FeedbackQuery />} />
+        <Route path="/changelog" element={<Changelog />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/files" element={<AdminFiles />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
@@ -174,9 +187,22 @@ export default function App() {
         <Route
           path="*"
           element={
-            <div className="page">
-              <Typography.Title level={3}>页面不存在</Typography.Title>
-              <Link to="/">返回首页</Link>
+            <div className="page page-compact-bottom page-404">
+              <Card className="notfound-card">
+                <Result
+                  icon={<div className="notfound-hero">404</div>}
+                  title="页面不存在"
+                  subTitle="请检查链接是否输入正确，或从下方按钮返回"
+                  extra={[
+                    <Button key="back" onClick={() => navigate(-1)}>
+                      返回上一页
+                    </Button>,
+                    <Button key="home" type="primary" onClick={() => navigate('/')}>
+                      返回首页
+                    </Button>
+                  ]}
+                />
+              </Card>
             </div>
           }
         />

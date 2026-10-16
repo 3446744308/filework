@@ -7,6 +7,20 @@ const { Title, Paragraph, Text, Link } = Typography
 
 const GITHUB_REPO = 'https://github.com/3446744308/filework'
 
+const OPEN_SOURCE = [
+  { name: 'React', desc: '前端 UI 框架', url: 'https://github.com/facebook/react' },
+  { name: 'Ant Design', desc: '企业级 UI 组件库', url: 'https://github.com/ant-design/ant-design' },
+  { name: '@ant-design/icons', desc: 'Ant Design 图标集', url: 'https://github.com/ant-design/ant-design-icons' },
+  { name: 'React Router', desc: '前端路由', url: 'https://github.com/remix-run/react-router' },
+  { name: 'dayjs', desc: '轻量日期时间处理', url: 'https://github.com/iamkun/dayjs' },
+  { name: 'Plyr', desc: '轻量视频播放器', url: 'https://github.com/sampotts/plyr' },
+  { name: 'Express', desc: 'Node.js Web 框架', url: 'https://github.com/expressjs/express' },
+  { name: 'Multer', desc: 'multipart 文件上传中间件', url: 'https://github.com/expressjs/multer' },
+  { name: 'qrcode-generator', desc: '二维码生成', url: 'https://github.com/kazuhikoarase/qrcode-generator' },
+  { name: 'Vite', desc: '前端构建工具', url: 'https://github.com/vitejs/vite' },
+  { name: '@vitejs/plugin-react', desc: 'Vite 的 React 插件', url: 'https://github.com/vitejs/vite-plugin-react' }
+]
+
 export default function About() {
   const settings = useSettings()
   const siteName = settings?.siteName || '文件驿站 · 匿名共享'
@@ -47,6 +61,25 @@ export default function About() {
         <Paragraph type="secondary">
           <Text type="secondary">发现 Bug 或有功能建议？欢迎在「其他 → 反馈」中告诉我们。</Text>
         </Paragraph>
+        <Title level={5}>开源软件</Title>
+        <Paragraph type="secondary">
+          本项目基于以下开源项目构建，感谢它们的作者与贡献者（均为 MIT 许可证）：
+        </Paragraph>
+        <div className="about-oss-grid">
+          {OPEN_SOURCE.map((lib) => (
+            <div className="about-oss-item" key={lib.name}>
+              <div className="about-oss-head">
+                <Link href={lib.url} target="_blank" rel="noopener noreferrer">
+                  {lib.name}
+                </Link>
+                <span className="about-oss-license">MIT</span>
+              </div>
+              <Text type="secondary" className="about-oss-desc">
+                {lib.desc}
+              </Text>
+            </div>
+          ))}
+        </div>
         <Title level={5}>开源地址</Title>
         <Paragraph>
           <Space align="center">

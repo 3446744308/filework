@@ -88,7 +88,8 @@ async function run() {
     health0.res.status === 200 &&
       health0.body.ok === true &&
       Array.isArray(health0.body.features) &&
-      health0.body.features.includes('blockedExts'),
+      health0.body.features.includes('blockedExts') &&
+      health0.body.features.includes('preview'),
     '健康检查返回 features 功能标记（部署自检）',
     JSON.stringify(health0.body)
   )
@@ -751,7 +752,93 @@ async function run() {
 
   await req(`/api/admin/${code15b}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } })
 
-  console.log('\n[16] 公网 IP 查询')
+  console.log('\n[16] 文件预览')
+  const upPv = await upload('preview me 可预览文本', { expiresIn: '24', maxDownloads: '3' })
+  const codePv = upPv.body.code
+  const pvText = await fetch(`${BASE}/api/preview?code=${codePv}`)
+  assert(pvText.status === 200, '文本预览返回 200', `实际 ${pvText.status}`)
+  assert(
+    (pvText.headers.get('content-type') || '').includes('text/plain'),
+    '文本预览 Content-Type 为 text/plain',
+    pvText.headers.get('content-type') || ''
+  )
+  assert(
+    !(pvText.headers.get('content-disposition') || '').includes('attachment'),
+    '预览响应为 inline 而非 attachment'
+  )
+  const pvBody = await pvText.text()
+  assert(pvBody === 'preview me 可预览文本', '预览内容与上传一致', pvBody)
+  const pvInfo1 = await req(`/api/info?code=${codePv}`)
+  assert(
+    pvInfo1.res.status === 200 && pvInfo1.body.downloads === 1,
+    '预览消耗 1 次下载次数',
+    JSON.stringify(pvInfo1.body)
+  )
+
+  const pvPngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64'
+  )
+  const pngForm = new FormData()
+  pngForm.append('file', new Blob([pvPngBytes], { type: 'image/png' }), 'pixel.png')
+  const pngUp = await req('/api/upload', { method: 'POST', body: pngForm })
+  const codePv2 = pngUp.body.code
+  const pvImg = await fetch(`${BASE}/api/preview?code=${codePv2}`)
+  assert(pvImg.status === 200, '图片预览返回 200', `实际 ${pvImg.status}`)
+  assert(
+    (pvImg.headers.get('content-type') || '').includes('image/png'),
+    '图片预览 Content-Type 为 image/png',
+    pvImg.headers.get('content-type') || ''
+  )
+  await pvImg.arrayBuffer()
+
+  const videoForm = new FormData()
+  videoForm.append('file', new Blob(['fake-mp4-bytes'], { type: 'video/mp4' }), 'clip.mp4')
+  const videoUp = await req('/api/upload', { method: 'POST', body: videoForm })
+  const codePv3 = videoUp.body.code
+  const pvVid = await fetch(`${BASE}/api/preview?code=${codePv3}`)
+  assert(pvVid.status === 200, '视频预览返回 200', `实际 ${pvVid.status}`)
+  assert(
+    (pvVid.headers.get('content-type') || '').includes('video/mp4'),
+    '视频预览 Content-Type 为 video/mp4',
+    pvVid.headers.get('content-type') || ''
+  )
+  await pvVid.arrayBuffer()
+
+  const pdfForm = new FormData()
+  pdfForm.append('file', new Blob(['%PDF-1.4 fake'], { type: 'application/pdf' }), 'doc.pdf')
+  const pdfUp = await req('/api/upload', { method: 'POST', body: pdfForm })
+  const codePv4 = pdfUp.body.code
+  const pvPdf = await fetch(`${BASE}/api/preview?code=${codePv4}`)
+  assert(pvPdf.status === 400, '不支持的类型返回 400', `实际 ${pvPdf.status}`)
+  const pvInfo4 = await req(`/api/info?code=${codePv4}`)
+  assert(pvInfo4.body.downloads === 0, '不支持的类型不消耗下载次数', JSON.stringify(pvInfo4.body))
+
+  const upPw = await upload('secret preview', { expiresIn: '24', maxDownloads: '3', password: 'pw123' })
+  const codePw = upPw.body.code
+  const pvNoPw = await fetch(`${BASE}/api/preview?code=${codePw}`)
+  assert(pvNoPw.status === 403, '设密文件无密码预览返回 403', `实际 ${pvNoPw.status}`)
+  const pvPw = await fetch(`${BASE}/api/preview?code=${codePw}&password=pw123`)
+  assert(pvPw.status === 200, '正确密码预览返回 200', `实际 ${pvPw.status}`)
+  await pvPw.arrayBuffer()
+
+  const pvAgain1 = await fetch(`${BASE}/api/preview?code=${codePv}`)
+  assert(pvAgain1.status === 200, '再次预览返回 200', `实际 ${pvAgain1.status}`)
+  await pvAgain1.arrayBuffer()
+  const pvAgain2 = await fetch(`${BASE}/api/preview?code=${codePv}`)
+  assert(pvAgain2.status === 200, '第三次预览（用尽次数）返回 200', `实际 ${pvAgain2.status}`)
+  await pvAgain2.arrayBuffer()
+  const pvDead = await fetch(`${BASE}/api/preview?code=${codePv}`)
+  assert(pvDead.status === 404, '次数耗尽后预览返回 404', `实际 ${pvDead.status}`)
+
+  const pvBad = await fetch(`${BASE}/api/preview?code=abc`)
+  assert(pvBad.status === 400, '非法取件码预览返回 400', `实际 ${pvBad.status}`)
+
+  for (const c of [codePv2, codePv3, codePv4, codePw]) {
+    await req(`/api/admin/${c}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } })
+  }
+
+  console.log('\n[17] 公网 IP 查询')
   const ipRes = await req('/api/ip')
   assert(
     ipRes.res.status === 200 && typeof ipRes.body.ip === 'string' && ipRes.body.ip.length > 0,
@@ -759,7 +846,7 @@ async function run() {
     JSON.stringify(ipRes.body)
   )
 
-  console.log('\n[17] 意见反馈')
+  console.log('\n[18] 意见反馈')
   const fbEmpty = await req('/api/feedback', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -944,7 +1031,7 @@ async function run() {
   const fbQueryGone = await req(`/api/feedback/query?code=${fb1.body.code}`)
   assert(fbQueryGone.res.status === 404, '删除后凭反馈号查询返回 404', `实际 ${fbQueryGone.res.status}`)
 
-  console.log('\n[18] 失败限流')
+  console.log('\n[19] 失败限流')
   let limited = false
   for (let i = 0; i < 10; i++) {
     const r = await req('/api/info?code=000000')
