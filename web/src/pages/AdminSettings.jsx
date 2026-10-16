@@ -36,6 +36,7 @@ export default function AdminSettings() {
   const [blockedExts, setBlockedExts] = useState([])
   const [displayMode, setDisplayMode] = useState('simple')
   const [customCodeEnabled, setCustomCodeEnabled] = useState(true)
+  const [previewEnabled, setPreviewEnabled] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -48,6 +49,7 @@ export default function AdminSettings() {
       setBlockedExts(settings.blockedExts || [])
       setDisplayMode(settings.displayMode === 'waybill' ? 'waybill' : 'simple')
       setCustomCodeEnabled(settings.customCodeEnabled !== false)
+      setPreviewEnabled(settings.previewEnabled !== false)
     }
   }, [settings])
 
@@ -66,7 +68,7 @@ export default function AdminSettings() {
       const mb = Number(maxSizeMb)
       const maxFileSize = Number.isFinite(mb) && mb > 0 ? Math.round(mb) * MB : 0
       await api.saveSettings(
-        { siteName, beian, gongan, maxFileSize, blockedExts, displayMode, customCodeEnabled },
+        { siteName, beian, gongan, maxFileSize, blockedExts, displayMode, customCodeEnabled, previewEnabled },
         getAdminKey()
       )
       message.success('设置已保存')
@@ -288,6 +290,19 @@ export default function AdminSettings() {
             </Space>
             <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
               开启后，发件人在填写收件信息时可自定义 6 位数字取件码；关闭后发件页不再显示该输入框，且已提交的自定义码将被忽略并改为自动生成。
+            </Typography.Paragraph>
+          </div>
+
+          <div>
+            <Typography.Title level={5}>文件预览</Typography.Title>
+            <Space>
+              <Switch checked={previewEnabled} onChange={setPreviewEnabled} />
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                保存
+              </Button>
+            </Space>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              开启后，取件页对图片、视频与文本文件显示「预览文件」按钮；关闭后取件页不再显示预览入口，预览接口也会被拒绝访问。
             </Typography.Paragraph>
           </div>
         </Space>

@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
   blockedExts: [],
   displayMode: 'simple',
   customCodeEnabled: true,
+  previewEnabled: true,
   updatedAt: 0
 }
 
@@ -68,6 +69,7 @@ export function saveSettings(input) {
     data.displayMode = input.displayMode === 'waybill' ? 'waybill' : 'simple'
   }
   if ('customCodeEnabled' in input) data.customCodeEnabled = Boolean(input.customCodeEnabled)
+  if ('previewEnabled' in input) data.previewEnabled = Boolean(input.previewEnabled)
   data.updatedAt = Date.now()
   writeSettings(data)
   return data
@@ -79,6 +81,10 @@ export function getBlockedExts() {
 
 export function isCustomCodeEnabled() {
   return getSettings().customCodeEnabled !== false
+}
+
+export function isPreviewEnabled() {
+  return getSettings().previewEnabled !== false
 }
 
 export function effectiveMaxFileSize() {

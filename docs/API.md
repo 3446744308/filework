@@ -87,6 +87,7 @@ GET /api/settings
   "blockedExts": ["exe", "php"],
   "displayMode": "simple",
   "customCodeEnabled": true,
+  "previewEnabled": true,
   "updatedAt": 1760000000000
 }
 ```
@@ -102,6 +103,7 @@ GET /api/settings
 | `blockedExts` | string[] | 禁止上传的后缀（无点、小写） |
 | `displayMode` | string | `simple` 简约 / `waybill` 面单 |
 | `customCodeEnabled` | boolean | 是否允许自定义取件码 |
+| `previewEnabled` | boolean | 是否允许在线预览；`false` 时取件页不显示预览按钮，`GET /api/preview` 返回 403 |
 
 App 建议：上传前用 `maxFileSize` 做本地预检，用 `blockedExts` 拦截明显不合法类型。
 
@@ -331,11 +333,11 @@ GET /api/preview?code=832451&password=secret123
 - `Content-Disposition`：`inline; filename=...`（文件名按 UTF-8 编码）
 - Body：文件二进制流
 
-**每次成功预览同样消耗 1 次下载次数**，与下载共用同一计数；不支持的类型返回 `400` 且**不消耗**次数。
+**每次成功预览同样消耗 1 次下载次数**，与下载共用同一计数；不支持的类型返回 `400` 且**不消耗**次数。若站点关闭了预览开关（`GET /api/settings` 的 `previewEnabled = false`），本接口在任何校验之前直接返回 `403`，同样**不消耗**次数。
 
 **App 实现建议**：一次请求拉取完整内容（如 Android 的 `Response.body().bytes()` / iOS 的 `URLSession.dataTask`），不要用分段 Range 请求播放视频，否则每次 Range 都会消耗次数。建议在触发预览前弹窗告知用户「预览将消耗 1 次次数」。
 
-**错误**：`400` 码格式错误 / 类型不支持预览 / `403` 密码错误 / `404` 不存在、已失效或次数耗尽 / `429` 限流 / `500` 预览失败。
+**错误**：`400` 码格式错误 / 类型不支持预览 / `403` 密码错误或预览功能已关闭 / `404` 不存在、已失效或次数耗尽 / `429` 限流 / `500` 预览失败。
 
 ---
 
@@ -541,7 +543,8 @@ PUT Body（字段均可选，只传需要改的）：
   "maxFileSize": 52428800,
   "blockedExts": ["exe", "php"],
   "displayMode": "waybill",
-  "customCodeEnabled": true
+  "customCodeEnabled": true,
+  "previewEnabled": true
 }
 ```
 
@@ -554,6 +557,7 @@ PUT Body（字段均可选，只传需要改的）：
 | `blockedExts` | string[]；服务端会规范化（小写/去点/过滤非法/去重/最多 100） |
 | `displayMode` | `simple` / `waybill`，非法回退 `simple` |
 | `customCodeEnabled` | boolean |
+| `previewEnabled` | boolean |
 
 **响应 200**：`{ "ok": true, "settings": { ... } }`（`settings` 为 `publicSettings` 结构，同 GET）。
 
@@ -634,7 +638,7 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 ### 5.1 寄件（上传）
 
 ```
-1. GET  /api/settings          → 读取 maxFileSize / blockedExts / customCodeEnabled
+1. GET  /api/settings          → 读取 maxFileSize / blockedExts / customCodeEnabled / previewEnabled
 2. 本地预检文件大小与后缀
 3. POST /api/upload            → 得到 code / hasPassword / expiresAt ...
 4. 展示取件码 + 分享链接 /d/<code>，可选引导用户设置密码

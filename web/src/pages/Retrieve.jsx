@@ -160,7 +160,8 @@ export default function Retrieve() {
 
   const remaining =
     info && info.maxDownloads > 0 ? Math.max(info.maxDownloads - info.downloads, 0) : 0
-  const previewKindNow = info ? previewKind(info.mime, info.filename, info.size) : null
+  const previewAllowed = settings?.previewEnabled !== false
+  const previewKindNow = previewAllowed && info ? previewKind(info.mime, info.filename, info.size) : null
   const textLines = useMemo(
     () => (previewData?.kind === 'text' && previewData.text != null ? previewData.text.split('\n') : []),
     [previewData]

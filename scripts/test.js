@@ -834,6 +834,44 @@ async function run() {
   const pvBad = await fetch(`${BASE}/api/preview?code=abc`)
   assert(pvBad.status === 400, '非法取件码预览返回 400', `实际 ${pvBad.status}`)
 
+  const pvSw0 = await req('/api/settings')
+  assert(
+    pvSw0.res.status === 200 && pvSw0.body.previewEnabled === true,
+    '默认允许预览（previewEnabled=true）',
+    JSON.stringify(pvSw0.body.previewEnabled)
+  )
+  const pvSwOff = await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ previewEnabled: false })
+  })
+  assert(
+    pvSwOff.res.status === 200 && pvSwOff.body.settings.previewEnabled === false,
+    '关闭预览开关后 settings.previewEnabled=false',
+    JSON.stringify(pvSwOff.body)
+  )
+  const pvOff = await fetch(`${BASE}/api/preview?code=${codePv2}`)
+  assert(pvOff.status === 403, '关闭预览后预览接口返回 403', `实际 ${pvOff.status}`)
+  const pvOffInfo = await req(`/api/info?code=${codePv2}`)
+  assert(
+    pvOffInfo.res.status === 200 && pvOffInfo.body.downloads === 1,
+    '关闭预览的请求不消耗下载次数',
+    JSON.stringify(pvOffInfo.body)
+  )
+  const pvSwOn = await req('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ previewEnabled: true })
+  })
+  assert(
+    pvSwOn.res.status === 200 && pvSwOn.body.settings.previewEnabled === true,
+    '恢复开启预览开关',
+    JSON.stringify(pvSwOn.body)
+  )
+  const pvBack = await fetch(`${BASE}/api/preview?code=${codePv2}`)
+  assert(pvBack.status === 200, '恢复开启后预览返回 200', `实际 ${pvBack.status}`)
+  await pvBack.arrayBuffer()
+
   for (const c of [codePv2, codePv3, codePv4, codePw]) {
     await req(`/api/admin/${c}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } })
   }

@@ -41,6 +41,7 @@ import {
   effectiveMaxFileSize,
   getBlockedExts,
   isCustomCodeEnabled,
+  isPreviewEnabled,
   LOGO_TYPES
 } from './settings.js'
 
@@ -213,6 +214,7 @@ function publicSettings(data) {
     blockedExts: getBlockedExts(),
     displayMode: settings.displayMode === 'waybill' ? 'waybill' : 'simple',
     customCodeEnabled: settings.customCodeEnabled !== false,
+    previewEnabled: settings.previewEnabled !== false,
     updatedAt: settings.updatedAt
   }
 }
@@ -363,6 +365,7 @@ app.get('/api/download', missGuard(config.rateLimitMisses), (req, res) => {
 })
 
 app.get('/api/preview', missGuard(config.rateLimitMisses), (req, res) => {
+  if (!isPreviewEnabled()) return fail(res, 403, '预览功能已关闭')
   const code = parseCode(req.query.code)
   if (!code) return fail(res, 400, '取件码格式不正确')
   const found = getActive(code)

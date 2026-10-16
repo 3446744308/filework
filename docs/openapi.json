@@ -51,7 +51,7 @@
       "get": {
         "tags": ["公开"],
         "summary": "获取站点设置",
-        "description": "返回站点名称、Logo 状态、上传上限、禁止类型、显示模式、自定义取件码开关等。App 上传前应用 maxFileSize / blockedExts 做本地预检。",
+        "description": "返回站点名称、Logo 状态、上传上限、禁止类型、显示模式、自定义取件码开关、文件预览开关等。App 上传前应用 maxFileSize / blockedExts 做本地预检。",
         "operationId": "getSettings",
         "responses": {
           "200": {
@@ -69,6 +69,7 @@
                   "blockedExts": ["exe", "php"],
                   "displayMode": "simple",
                   "customCodeEnabled": true,
+                  "previewEnabled": true,
                   "updatedAt": 1760000000000
                 }
               }
@@ -94,7 +95,8 @@
                 "maxFileSize": 52428800,
                 "blockedExts": ["exe", "php"],
                 "displayMode": "waybill",
-                "customCodeEnabled": true
+                "customCodeEnabled": true,
+                "previewEnabled": true
               }
             }
           }
@@ -511,7 +513,7 @@
       "get": {
         "tags": ["取件"],
         "summary": "在线预览文件",
-        "description": "支持图片（image/*）、视频（video/*）、文本（text/* 与常见文本 MIME/扩展名，文本类 >10MB 不可预览）；成功返回文件流并同样消耗 1 次次数（与下载共用计数）；不支持的类型返回 400 且不消耗次数。Content-Disposition: inline。设密分享需带 password。",
+        "description": "支持图片（image/*）、视频（video/*）、文本（text/* 与常见文本 MIME/扩展名，文本类 >10MB 不可预览）；成功返回文件流并同样消耗 1 次次数（与下载共用计数）；不支持的类型返回 400 且不消耗次数；站点关闭预览开关（settings.previewEnabled=false）时在任何校验之前直接返回 403 且不消耗次数。Content-Disposition: inline。设密分享需带 password。",
         "operationId": "previewFile",
         "parameters": [
           {
@@ -546,7 +548,18 @@
               }
             }
           },
-          "403": { "$ref": "#/components/responses/Forbidden" },
+          "403": {
+            "description": "取件密码错误，或站点已关闭预览功能（均不消耗次数）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "examples": {
+                  "password": { "value": { "error": "取件密码错误" } },
+                  "disabled": { "value": { "error": "预览功能已关闭" } }
+                }
+              }
+            }
+          },
           "404": { "$ref": "#/components/responses/NotFound" },
           "429": { "$ref": "#/components/responses/RateLimited" },
           "500": {
@@ -956,6 +969,7 @@
           "blockedExts": { "type": "array", "items": { "type": "string" }, "description": "禁止上传的后缀（无点、小写）" },
           "displayMode": { "type": "string", "enum": ["simple", "waybill"], "description": "前端显示样式" },
           "customCodeEnabled": { "type": "boolean", "description": "是否允许自定义取件码" },
+          "previewEnabled": { "type": "boolean", "description": "是否允许在线预览；false 时取件页不显示预览按钮且 /api/preview 返回 403" },
           "updatedAt": { "type": "integer", "format": "int64" }
         }
       },
@@ -968,7 +982,8 @@
           "maxFileSize": { "type": "integer", "format": "int64", "description": "字节；≤0 恢复 env 默认" },
           "blockedExts": { "type": "array", "items": { "type": "string" } },
           "displayMode": { "type": "string", "enum": ["simple", "waybill"] },
-          "customCodeEnabled": { "type": "boolean" }
+          "customCodeEnabled": { "type": "boolean" },
+          "previewEnabled": { "type": "boolean", "description": "是否允许在线预览" }
         }
       },
       "SettingsResponse": {
