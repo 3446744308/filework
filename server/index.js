@@ -33,6 +33,14 @@ import {
 import { getNotice, saveNotice } from './notice.js'
 import { readCounters } from './stats.js'
 import {
+  getApps,
+  appsPublicInfo,
+  appFilePath,
+  saveApp,
+  removeApp,
+  isAppType
+} from './apps.js'
+import {
   getSettings,
   saveSettings,
   saveLogo,
@@ -105,7 +113,8 @@ app.get('/api/health', (req, res) =>
       'beian',
       'gongan',
       'feedback',
-      'preview'
+      'preview',
+      'apps'
     ]
   })
 )
@@ -264,6 +273,55 @@ app.post('/api/settings/logo', adminAuth, (req, res) => {
 
 app.delete('/api/settings/logo', adminAuth, (req, res) => {
   res.json({ ok: true, settings: publicSettings(removeLogo()) })
+})
+
+app.get('/api/apps', (req, res) => res.json(appsPublicInfo()))
+
+app.get('/api/app/download', rateGuard(config.uploadLimitPerMinute), (req, res) => {
+  const type = String(req.query.type ?? '')
+  if (!isAppType(type)) return fail(res, 400, 'type 仅支持 android 或 desktop')
+  const target = appFilePath(type)
+  if (!target) return fail(res, 404, '暂未提供该客户端下载')
+  const meta = getApps()[type]
+  res.download(target, meta.filename, (err) => {
+    if (err && !res.headersSent) fail(res, 500, '下载失败，请重试')
+  })
+})
+
+const appUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, config.tmpDir),
+    filename: (req, file, cb) => cb(null, `app-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`)
+  }),
+  limits: { fileSize: config.appMaxFileSize, files: 1 }
+})
+
+app.post('/api/admin/apps/:type', adminAuth, (req, res) => {
+  const type = String(req.params.type ?? '')
+  if (!isAppType(type)) return fail(res, 400, 'type 仅支持 android 或 desktop')
+  appUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return fail(res, 413, `安装包不能超过 ${Math.floor(config.appMaxFileSize / 1024 / 1024)}MB`)
+      }
+      return fail(res, 400, '上传失败：' + err.message)
+    }
+    if (!req.file) return fail(res, 400, '请选择安装包文件')
+    const cleanup = () => fs.unlink(req.file.path, () => {})
+    try {
+      const app = saveApp(type, req.file.path, req.file.originalname, req.file.size)
+      res.json({ ok: true, type, app })
+    } catch (e) {
+      cleanup()
+      fail(res, 500, '保存失败：' + e.message)
+    }
+  })
+})
+
+app.delete('/api/admin/apps/:type', adminAuth, (req, res) => {
+  const type = String(req.params.type ?? '')
+  if (!isAppType(type)) return fail(res, 400, 'type 仅支持 android 或 desktop')
+  res.json({ ok: true, apps: removeApp(type) })
 })
 
 app.post('/api/upload', rateGuard(config.uploadLimitPerMinute), (req, res) => {

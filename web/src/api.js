@@ -124,6 +124,38 @@ export const api = {
       headers: { 'x-admin-key': key }
     })
   },
+  apps() {
+    return request('/api/apps')
+  },
+  uploadApp(type, file, key) {
+    return new Promise((resolve, reject) => {
+      const form = new FormData()
+      form.append('file', file)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `/api/admin/apps/${type}`)
+      xhr.setRequestHeader('x-admin-key', key)
+      xhr.onload = () => {
+        let data = null
+        try {
+          data = JSON.parse(xhr.responseText)
+        } catch {}
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data)
+        else {
+          const err = new Error((data && data.error) || `上传失败（${xhr.status}）`)
+          err.status = xhr.status
+          reject(err)
+        }
+      }
+      xhr.onerror = () => reject(new Error('网络错误，上传失败'))
+      xhr.send(form)
+    })
+  },
+  removeApp(type, key) {
+    return request(`/api/admin/apps/${type}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-key': key }
+    })
+  },
   saveNotice(data, key) {
     return request('/api/notice', {
       method: 'PUT',

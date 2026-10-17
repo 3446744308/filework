@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Menu } from 'antd'
 import {
+  AppstoreOutlined,
   DashboardOutlined,
   FolderOpenOutlined,
   HomeOutlined,
@@ -28,6 +29,11 @@ const MENU_ITEMS = [
     label: <Link to="/admin/feedback">反馈管理</Link>
   },
   {
+    key: '/admin/apps',
+    icon: <AppstoreOutlined />,
+    label: <Link to="/admin/apps">APP 设置</Link>
+  },
+  {
     key: '/admin/settings',
     icon: <SettingOutlined />,
     label: <Link to="/admin/settings">设置</Link>
@@ -52,9 +58,11 @@ export default function AdminShell({ children }) {
     ? '/admin/files'
     : location.pathname.startsWith('/admin/feedback')
       ? '/admin/feedback'
-      : location.pathname.startsWith('/admin/settings')
-        ? '/admin/settings'
-        : '/admin'
+      : location.pathname.startsWith('/admin/apps')
+        ? '/admin/apps'
+        : location.pathname.startsWith('/admin/settings')
+          ? '/admin/settings'
+          : '/admin'
   const sidebarLogo = logoUrlOf(settings)
 
   return (

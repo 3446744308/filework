@@ -89,7 +89,8 @@ async function run() {
       health0.body.ok === true &&
       Array.isArray(health0.body.features) &&
       health0.body.features.includes('blockedExts') &&
-      health0.body.features.includes('preview'),
+      health0.body.features.includes('preview') &&
+      health0.body.features.includes('apps'),
     '健康检查返回 features 功能标记（部署自检）',
     JSON.stringify(health0.body)
   )
@@ -1069,7 +1070,109 @@ async function run() {
   const fbQueryGone = await req(`/api/feedback/query?code=${fb1.body.code}`)
   assert(fbQueryGone.res.status === 404, '删除后凭反馈号查询返回 404', `实际 ${fbQueryGone.res.status}`)
 
-  console.log('\n[19] 失败限流')
+  console.log('\n[19] APP 客户端')
+  const apps0 = await req('/api/apps')
+  assert(
+    apps0.res.status === 200 && apps0.body.android === null && apps0.body.desktop === null,
+    '默认两个槽位均为空',
+    JSON.stringify(apps0.body)
+  )
+  const appNoKey = await req('/api/admin/apps/android', { method: 'POST', body: new FormData() })
+  assert(appNoKey.res.status === 401, '无密钥上传 APP 返回 401', `实际 ${appNoKey.res.status}`)
+  const appBadType = await req('/api/admin/apps/ios', {
+    method: 'POST',
+    headers: { 'x-admin-key': ADMIN_KEY },
+    body: new FormData()
+  })
+  assert(appBadType.res.status === 400, '非法 type 上传返回 400', `实际 ${appBadType.res.status}`)
+
+  const apkBytes = Buffer.from('fake-apk-package-bytes')
+  const apkForm = new FormData()
+  apkForm.append(
+    'file',
+    new Blob([apkBytes], { type: 'application/vnd.android.package-archive' }),
+    'App-Release.apk'
+  )
+  const apkUp = await req('/api/admin/apps/android', {
+    method: 'POST',
+    headers: { 'x-admin-key': ADMIN_KEY },
+    body: apkForm
+  })
+  assert(
+    apkUp.res.status === 200 && apkUp.body.ok === true && apkUp.body.app.filename === 'App-Release.apk',
+    '上传 Android 安装包',
+    JSON.stringify(apkUp.body)
+  )
+  const exeForm = new FormData()
+  exeForm.append('file', new Blob(['fake-exe-bytes'], { type: 'application/octet-stream' }), 'Setup.exe')
+  const exeUp = await req('/api/admin/apps/desktop', {
+    method: 'POST',
+    headers: { 'x-admin-key': ADMIN_KEY },
+    body: exeForm
+  })
+  assert(
+    exeUp.res.status === 200 && exeUp.body.app.filename === 'Setup.exe',
+    '上传桌面端安装包',
+    JSON.stringify(exeUp.body)
+  )
+
+  const apps1 = await req('/api/apps')
+  assert(
+    apps1.res.status === 200 &&
+      apps1.body.android &&
+      apps1.body.android.filename === 'App-Release.apk' &&
+      apps1.body.android.size === apkBytes.length &&
+      apps1.body.desktop &&
+      apps1.body.desktop.url === '/api/app/download?type=desktop',
+    '公开列表返回两槽位信息',
+    JSON.stringify(apps1.body)
+  )
+  const appDl = await fetch(`${BASE}/api/app/download?type=android`)
+  assert(appDl.status === 200, '下载 Android 安装包返回 200', `实际 ${appDl.status}`)
+  assert(
+    (appDl.headers.get('content-disposition') || '').includes('attachment'),
+    '下载响应为 attachment',
+    appDl.headers.get('content-disposition') || ''
+  )
+  const appDlBytes = Buffer.from(await appDl.arrayBuffer())
+  assert(appDlBytes.equals(apkBytes), '下载内容与上传一致', `${appDlBytes.length}B`)
+  const appDlBad = await fetch(`${BASE}/api/app/download?type=ios`)
+  assert(appDlBad.status === 400, '非法 type 下载返回 400', `实际 ${appDlBad.status}`)
+
+  const appRepForm = new FormData()
+  appRepForm.append('file', new Blob(['replaced-apk']), 'App-New.apk')
+  const appRep = await req('/api/admin/apps/android', {
+    method: 'POST',
+    headers: { 'x-admin-key': ADMIN_KEY },
+    body: appRepForm
+  })
+  const appRepInfo = await req('/api/apps')
+  assert(
+    appRep.res.status === 200 && appRepInfo.body.android.filename === 'App-New.apk',
+    '替换上传更新文件名',
+    JSON.stringify(appRepInfo.body.android)
+  )
+
+  const appDel = await req('/api/admin/apps/android', {
+    method: 'DELETE',
+    headers: { 'x-admin-key': ADMIN_KEY }
+  })
+  assert(appDel.res.status === 200 && appDel.body.ok === true, '删除 Android 安装包', JSON.stringify(appDel.body))
+  const appDelDl = await fetch(`${BASE}/api/app/download?type=android`)
+  assert(appDelDl.status === 404, '删除后下载返回 404', `实际 ${appDelDl.status}`)
+  const appDelInfo = await req('/api/apps')
+  assert(
+    appDelInfo.body.android === null && appDelInfo.body.desktop !== null,
+    '删除后 android 槽位为空、desktop 保留',
+    JSON.stringify(appDelInfo.body)
+  )
+  const appDel2 = await req('/api/admin/apps/desktop', {
+    method: 'DELETE',
+    headers: { 'x-admin-key': ADMIN_KEY }
+  })
+  assert(appDel2.res.status === 200, '删除桌面端安装包', JSON.stringify(appDel2.body))
+
+  console.log('\n[20] 失败限流')
   let limited = false
   for (let i = 0; i < 10; i++) {
     const r = await req('/api/info?code=000000')

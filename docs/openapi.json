@@ -39,7 +39,7 @@
                 "schema": { "$ref": "#/components/schemas/HealthResponse" },
                 "example": {
                   "ok": true,
-                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan", "feedback", "preview"]
+                  "features": ["siteSettings", "maxFileSize", "blockedExts", "noticeDisplay", "displayMode", "waybill", "publicIp", "customCode", "password", "beian", "gongan", "feedback", "preview", "apps"]
                 }
               }
             }
@@ -171,6 +171,82 @@
         }
       }
     },
+    "/api/admin/apps/{type}": {
+      "post": {
+        "tags": ["管理"],
+        "summary": "上传 APP 安装包",
+        "description": "multipart 上传客户端安装包，字段名 file。type ∈ android（移动端）/ desktop（桌面端）。同类型覆盖替换；上限 APP_MAX_SIZE（默认 1GB）；上传成功即生成永久下载直链。",
+        "operationId": "uploadApp",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "description": "客户端类型",
+            "schema": { "type": "string", "enum": ["android", "desktop"] }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "安装包文件（.apk / .exe / .msi / .dmg 等）" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "上传成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AppUploadResponse" },
+                "example": {
+                  "ok": true,
+                  "type": "android",
+                  "app": { "filename": "App-Release.apk", "size": 52428800, "uploadedAt": 1760000000000 }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "413": { "$ref": "#/components/responses/TooLarge" }
+        }
+      },
+      "delete": {
+        "tags": ["管理"],
+        "summary": "删除 APP 安装包",
+        "operationId": "deleteApp",
+        "security": [{ "AdminKey": [] }],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "enum": ["android", "desktop"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AppsResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
     "/api/logo": {
       "get": {
         "tags": ["公开"],
@@ -186,6 +262,70 @@
             }
           },
           "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/apps": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "APP 客户端下载信息",
+        "description": "返回 android（移动端）/ desktop（桌面端）两个槽位的安装包信息与永久下载直链；未上传的槽位为 null。",
+        "operationId": "getApps",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AppsInfo" },
+                "example": {
+                  "android": {
+                    "filename": "App-Release.apk",
+                    "size": 52428800,
+                    "uploadedAt": 1760000000000,
+                    "url": "/api/app/download?type=android"
+                  },
+                  "desktop": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app/download": {
+      "get": {
+        "tags": ["公开"],
+        "summary": "下载 APP 安装包",
+        "description": "永久有效直链：不过期、不计次数、无需鉴权。Content-Disposition: attachment，文件名为上传时的原始文件名。",
+        "operationId": "downloadApp",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["android", "desktop"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "安装包二进制流",
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": {
+            "description": "该类型未上传安装包",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "暂未提供该客户端下载" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" }
         }
       }
     },
@@ -991,6 +1131,45 @@
         "properties": {
           "ok": { "type": "boolean" },
           "settings": { "$ref": "#/components/schemas/Settings" }
+        }
+      },
+      "AppSlot": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string", "description": "安装包原始文件名（已做安全清洗）" },
+          "size": { "type": "integer", "format": "int64", "description": "文件大小（字节）" },
+          "uploadedAt": { "type": "integer", "format": "int64" },
+          "url": { "type": "string", "description": "永久下载直链（相对路径），如 /api/app/download?type=android" }
+        }
+      },
+      "AppsInfo": {
+        "type": "object",
+        "description": "APP 客户端下载信息（公开）。android 移动端 / desktop 桌面端，未上传为 null。",
+        "properties": {
+          "android": { "oneOf": [{ "$ref": "#/components/schemas/AppSlot" }, { "type": "null" }] },
+          "desktop": { "oneOf": [{ "$ref": "#/components/schemas/AppSlot" }, { "type": "null" }] }
+        }
+      },
+      "AppUploadResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "type": { "type": "string", "enum": ["android", "desktop"] },
+          "app": {
+            "type": "object",
+            "properties": {
+              "filename": { "type": "string" },
+              "size": { "type": "integer", "format": "int64" },
+              "uploadedAt": { "type": "integer", "format": "int64" }
+            }
+          }
+        }
+      },
+      "AppsResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "apps": { "$ref": "#/components/schemas/AppsInfo" }
         }
       },
       "Notice": {

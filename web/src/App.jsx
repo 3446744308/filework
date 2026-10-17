@@ -15,6 +15,7 @@ import Upload from './pages/Upload.jsx'
 import Retrieve from './pages/Retrieve.jsx'
 import Admin from './pages/Admin.jsx'
 import AdminFiles from './pages/AdminFiles.jsx'
+import AdminApps from './pages/AdminApps.jsx'
 import AdminSettings from './pages/AdminSettings.jsx'
 import AdminFeedback from './pages/AdminFeedback.jsx'
 import About from './pages/About.jsx'
@@ -182,6 +183,7 @@ export default function App() {
         <Route path="/changelog" element={<Changelog />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/files" element={<AdminFiles />} />
+        <Route path="/admin/apps" element={<AdminApps />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/feedback" element={<AdminFeedback />} />
         <Route

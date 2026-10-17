@@ -59,7 +59,7 @@ GET /api/health
   "features": [
     "siteSettings", "maxFileSize", "blockedExts",
     "noticeDisplay", "displayMode", "waybill",
-    "publicIp", "customCode", "password", "beian", "gongan", "feedback", "preview"
+    "publicIp", "customCode", "password", "beian", "gongan", "feedback", "preview", "apps"
   ]
 }
 ```
@@ -397,6 +397,47 @@ GET /api/feedback/query?code=FB-24815302
 
 ---
 
+### 2.13 APP 客户端下载
+
+站点管理员可在后台上传官方客户端安装包（移动端 Android / 桌面端 PC），生成**永久有效**的下载直链（不过期、不计次数、无需鉴权）。
+
+```
+GET /api/apps
+```
+
+**响应 200**
+
+```json
+{
+  "android": {
+    "filename": "App-Release.apk",
+    "size": 52428800,
+    "uploadedAt": 1760000000000,
+    "url": "/api/app/download?type=android"
+  },
+  "desktop": null
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `android` | 移动端（Android）安装包信息；未上传为 `null` |
+| `desktop` | 桌面端（PC）安装包信息；未上传为 `null` |
+| `url` | 相对路径下载直链，拼上站点域名即可分发（永久有效） |
+
+```
+GET /api/app/download?type=android
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `type` | 是 | `android` 移动端 / `desktop` 桌面端 |
+
+**响应 200**：安装包二进制流，`Content-Disposition: attachment`，文件名为上传时的原始文件名。  
+**错误**：`400` type 非法 / `404` 该类型未上传 / `429` 限流（与上传共用频率桶）。
+
+---
+
 ## 3. 管理接口（需 `x-admin-key`）
 
 所有管理接口需请求头：
@@ -622,6 +663,26 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 
 ---
 
+### 3.9 上传 / 删除 APP 安装包
+
+```
+POST   /api/admin/apps/:type   # multipart 上传（字段名 file），同类型覆盖替换
+DELETE /api/admin/apps/:type   # 删除该类型安装包
+```
+
+| 参数 | 说明 |
+|---|---|
+| `:type` | `android` 移动端 / `desktop` 桌面端；其他值 `400` |
+
+- 上传上限为环境变量 `APP_MAX_SIZE`（默认 1GB），超出返回 `413`。
+- 上传成功即覆盖同类型旧安装包；原始文件名会做安全清洗后保留，供下载时回传。
+
+**上传响应 200**：`{ "ok": true, "type": "android", "app": { "filename": "App-Release.apk", "size": 52428800, "uploadedAt": 1760000000000 } }`  
+**删除响应 200**：`{ "ok": true, "apps": { "android": null, "desktop": { ... } } }`（`apps` 为更新后的完整公开信息）  
+**错误**：`400` type 非法或未选择文件 / `401` 密钥错误 / `413` 超过 `APP_MAX_SIZE` / `500` 保存失败。
+
+---
+
 ## 4. 限流规则
 
 | 维度 | 默认阈值 | 触发后 |
@@ -684,11 +745,15 @@ PUT    /api/admin/feedback/templates # 保存回复模板
 | POST | `/api/verify-password` | 公开 | 验证取件密码 |
 | GET | `/api/download` | 公开 | 下载文件（消耗次数） |
 | GET | `/api/preview` | 公开 | 在线预览文件（消耗次数，仅图片/视频/文本） |
+| GET | `/api/apps` | 公开 | APP 客户端安装包信息（android / desktop 槽位） |
+| GET | `/api/app/download` | 公开 | 下载 APP 安装包（永久直链，不计次数） |
 | GET | `/api/admin/ping` | admin | 验证管理密钥 |
 | GET | `/api/admin/stats` | admin | 统计概览 |
 | GET | `/api/admin/list` | admin | 分享列表（含已失效，含 status） |
 | DELETE | `/api/admin/expired` | admin | 清空全部已失效记录（彻底删除） |
 | DELETE | `/api/admin/:code` | admin | 删除指定分享（彻底删除记录与文件） |
+| POST | `/api/admin/apps/:type` | admin | 上传 APP 安装包（覆盖替换） |
+| DELETE | `/api/admin/apps/:type` | admin | 删除 APP 安装包 |
 
 \* 上传接口受每 IP 每分钟频率限制，但无需管理密钥。
 
