@@ -130,6 +130,7 @@ export default function App() {
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
       {!isAdmin && (
         <>
+          <NoticeBar />
           <header className="site-header">
             <span className="site-brand">
               {logoUrl && <img className="site-logo" src={logoUrl} alt="" />}
@@ -169,7 +170,6 @@ export default function App() {
               onClick={() => setDrawerOpen(false)}
             />
           </Drawer>
-          <NoticeBar />
         </>
       )}
       <Routes>

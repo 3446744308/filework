@@ -99,11 +99,15 @@ body {
 }
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   gap: 24px;
   background: #fff;
   border-bottom: 1px solid #eef0f4;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
   padding: 0 24px;
   height: 56px;
 }
@@ -1309,6 +1313,18 @@ body {
 
 .log-sep {
   margin: 26px 0 !important;
+}
+
+.log-contrib {
+  margin-left: 8px;
+  font-size: 13px;
+  color: #1677ff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.log-contrib:hover {
+  text-decoration: underline;
 }
 
 .page.page-404 {

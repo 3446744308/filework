@@ -5,6 +5,18 @@ const { Title, Paragraph, Text } = Typography
 
 const RELEASES = [
   {
+    date: '2026-10-17',
+    sections: [
+      {
+        label: '产品发布',
+        items: [
+          { text: 'APP 上线', contributor: 'leichen', url: 'https://github.com/beimu123321/' },
+          { text: '桌面端上线', contributor: 'yayale', url: 'https://github.com/3446744308' }
+        ]
+      }
+    ]
+  },
+  {
     date: '2026-10-16',
     sections: [
       {
@@ -19,7 +31,10 @@ const RELEASES = [
       },
       {
         label: '优化改进',
-        items: ['顶部菜单「其他」下拉箭头在桌面与移动端样式统一']
+        items: [
+          { text: '存储优化', contributor: 'zhouweihang', url: 'https://github.com/zhouweihang' },
+          '顶部菜单「其他」下拉箭头在桌面与移动端样式统一'
+        ]
       }
     ]
   },
@@ -88,8 +103,15 @@ export default function Changelog() {
                     {section.label}
                   </Text>
                   <ul className="log-list">
-                    {section.items.map((item) => (
-                      <li key={item}>{item}</li>
+                    {section.items.map((item, i) => (
+                      <li key={i}>
+                        {typeof item === 'string' ? item : item.text}
+                        {typeof item !== 'string' && (
+                          <a className="log-contrib" href={item.url} target="_blank" rel="noreferrer">
+                            贡献者 @{item.contributor}
+                          </a>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </div>
